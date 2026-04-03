@@ -1,79 +1,25 @@
 package registry
 
 import (
+	"embed"
+	"encoding/json"
 	"strings"
 )
 
-// knownBenchmarks provides curated MMLU and Chatbot Arena ELO scores
-// for well-known open-weight models. This enriches models where the
-// source data doesn't include benchmark fields.
-//
-// Sources: LMSYS Chatbot Arena leaderboard, official model cards.
-var knownBenchmarks = map[string]benchmarkData{
-	// Llama 3 family
-	"meta-llama/llama-3.1-8b-instruct":   {MMLU: 69.4, ArenaELO: 1190},
-	"meta-llama/llama-3.1-70b-instruct":  {MMLU: 79.3, ArenaELO: 1250},
-	"meta-llama/llama-3.1-405b-instruct": {MMLU: 87.0, ArenaELO: 1280},
-	"meta-llama/llama-3-8b-instruct":     {MMLU: 68.4, ArenaELO: 1170},
-	"meta-llama/llama-3-70b-instruct":    {MMLU: 79.5, ArenaELO: 1240},
-	"meta-llama/llama-3.2-1b-instruct":   {MMLU: 49.0, ArenaELO: 1050},
-	"meta-llama/llama-3.2-3b-instruct":   {MMLU: 58.0, ArenaELO: 1100},
+//go:embed data/benchmarks.json
+var benchmarksFS embed.FS
 
-	// Mistral family
-	"mistralai/mistral-7b-instruct":         {MMLU: 60.1, ArenaELO: 1140},
-	"mistralai/mistral-7b-instruct-v0.2":    {MMLU: 60.5, ArenaELO: 1145},
-	"mistralai/mistral-7b-instruct-v0.3":    {MMLU: 61.0, ArenaELO: 1150},
-	"mistralai/mixtral-8x7b-instruct-v0.1":  {MMLU: 70.6, ArenaELO: 1210},
-	"mistralai/mixtral-8x22b-instruct-v0.1": {MMLU: 76.5, ArenaELO: 1240},
-	"mistralai/mistral-large-instruct-2407": {MMLU: 81.0, ArenaELO: 1260},
-	"mistralai/mistral-small-24b-instruct":  {MMLU: 72.0, ArenaELO: 1200},
-	"mistralai/codestral-22b-v0.1":          {MMLU: 62.0, ArenaELO: 1120},
+// benchmarksManifest is the top-level structure of benchmarks.json.
+type benchmarksManifest struct {
+	Version string                      `json:"version"`
+	Sources []string                    `json:"sources"`
+	Models  map[string]benchmarkEntry   `json:"models"`
+}
 
-	// Qwen family
-	"qwen/qwen2.5-7b-instruct":      {MMLU: 74.5, ArenaELO: 1200},
-	"qwen/qwen2.5-14b-instruct":     {MMLU: 77.2, ArenaELO: 1230},
-	"qwen/qwen2.5-32b-instruct":     {MMLU: 79.0, ArenaELO: 1245},
-	"qwen/qwen2.5-72b-instruct":     {MMLU: 81.5, ArenaELO: 1255},
-	"qwen/qwen2.5-0.5b-instruct":    {MMLU: 35.0, ArenaELO: 900},
-	"qwen/qwen2.5-1.5b-instruct":    {MMLU: 42.0, ArenaELO: 950},
-	"qwen/qwen2.5-3b-instruct":      {MMLU: 55.0, ArenaELO: 1050},
-	"qwen/qwen2-7b-instruct":        {MMLU: 71.5, ArenaELO: 1180},
-	"qwen/qwen2-72b-instruct":       {MMLU: 78.5, ArenaELO: 1235},
-	"qwen/qwen2.5-coder-7b-instruct": {MMLU: 68.0, ArenaELO: 1140},
-	"qwen/qwen2.5-coder-32b-instruct": {MMLU: 76.0, ArenaELO: 1210},
-
-	// Google Gemma family
-	"google/gemma-2-2b-it":  {MMLU: 55.0, ArenaELO: 1080},
-	"google/gemma-2-9b-it":  {MMLU: 65.0, ArenaELO: 1160},
-	"google/gemma-2-27b-it": {MMLU: 73.0, ArenaELO: 1220},
-	"google/gemma-7b-it":    {MMLU: 58.0, ArenaELO: 1110},
-
-	// Phi family
-	"microsoft/phi-3-mini-4k-instruct":   {MMLU: 69.0, ArenaELO: 1160},
-	"microsoft/phi-3-mini-128k-instruct": {MMLU: 69.0, ArenaELO: 1160},
-	"microsoft/phi-3-small-8k-instruct":  {MMLU: 65.0, ArenaELO: 1120},
-	"microsoft/phi-3-medium-4k-instruct": {MMLU: 72.0, ArenaELO: 1190},
-	"microsoft/phi-3.5-mini-instruct":    {MMLU: 70.0, ArenaELO: 1175},
-	"microsoft/phi-3.5-moe-instruct":     {MMLU: 71.0, ArenaELO: 1180},
-
-	// DeepSeek family
-	"deepseek-ai/deepseek-coder-6.7b-instruct": {MMLU: 62.0, ArenaELO: 1130},
-	"deepseek-ai/deepseek-coder-33b-instruct":  {MMLU: 70.0, ArenaELO: 1180},
-	"deepseek-ai/deepseek-v2-lite":             {MMLU: 68.0, ArenaELO: 1170},
-	"deepseek-ai/deepseek-v2.5":                {MMLU: 78.0, ArenaELO: 1240},
-	"deepseek-ai/deepseek-r1-distill-qwen-1.5b": {MMLU: 45.0, ArenaELO: 1000},
-	"deepseek-ai/deepseek-r1-distill-qwen-7b":   {MMLU: 62.0, ArenaELO: 1120},
-	"deepseek-ai/deepseek-r1-distill-qwen-14b":  {MMLU: 70.0, ArenaELO: 1180},
-	"deepseek-ai/deepseek-r1-distill-qwen-32b":  {MMLU: 74.0, ArenaELO: 1210},
-	"deepseek-ai/deepseek-r1-distill-llama-8b":  {MMLU: 64.0, ArenaELO: 1140},
-	"deepseek-ai/deepseek-r1-distill-llama-70b": {MMLU: 77.0, ArenaELO: 1235},
-
-	// LLaVA (multimodal)
-	"llava-hf/llava-1.5-7b-hf":          {MMLU: 52.0, ArenaELO: 1060},
-	"llava-hf/llava-v1.6-mistral-7b-hf": {MMLU: 58.0, ArenaELO: 1100},
-
-	// TinyLlama
-	"tinyllama/tinyllama-1.1b-chat-v1.0": {MMLU: 38.0, ArenaELO: 920},
+// benchmarkEntry holds a single model's benchmark scores.
+type benchmarkEntry struct {
+	MMLU     float64 `json:"mmlu"`
+	ArenaELO float64 `json:"arena_elo"`
 }
 
 // benchmarkData holds known benchmark scores for a model.
@@ -81,6 +27,32 @@ type benchmarkData struct {
 	MMLU     float64
 	ArenaELO float64
 }
+
+// loadBenchmarks reads the embedded benchmarks.json and returns a lookup map.
+func loadBenchmarks() map[string]benchmarkData {
+	data, err := benchmarksFS.ReadFile("data/benchmarks.json")
+	if err != nil {
+		// Fallback to empty — models won't be enriched but won't crash
+		return map[string]benchmarkData{}
+	}
+
+	var manifest benchmarksManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return map[string]benchmarkData{}
+	}
+
+	result := make(map[string]benchmarkData, len(manifest.Models))
+	for id, entry := range manifest.Models {
+		result[strings.ToLower(id)] = benchmarkData{
+			MMLU:     entry.MMLU,
+			ArenaELO: entry.ArenaELO,
+		}
+	}
+	return result
+}
+
+// knownBenchmarks is populated at init from the embedded JSON.
+var knownBenchmarks = loadBenchmarks()
 
 // lookupBenchmarks finds MMLU and Arena ELO scores for a model by name.
 // Returns (mmlu, elo, found).
@@ -121,6 +93,10 @@ func namesMatch(a, b string) bool {
 }
 
 // normalizeForMatch produces a normalized string for fuzzy model name comparison.
+// Longer size tokens are replaced first to prevent shorter tokens from corrupting
+// them (e.g., "7b" must not run before "70b").
+// Each size gets a unique placeholder so fuzzy matching only succeeds when the
+// *same* parameter size is referenced — a 3B model must never match an 8B entry.
 func normalizeForMatch(s string) string {
 	s = strings.ToLower(s)
 	// Remove version suffixes like v0.2, v0.3
@@ -130,23 +106,30 @@ func normalizeForMatch(s string) string {
 			break
 		}
 	}
-	// Remove size indicators for fuzzy matching
-	s = strings.ReplaceAll(s, "8b", "xb")
-	s = strings.ReplaceAll(s, "7b", "xb")
-	s = strings.ReplaceAll(s, "70b", "xxb")
-	s = strings.ReplaceAll(s, "14b", "xb")
-	s = strings.ReplaceAll(s, "32b", "xb")
-	s = strings.ReplaceAll(s, "72b", "xxb")
-	s = strings.ReplaceAll(s, "9b", "xb")
-	s = strings.ReplaceAll(s, "27b", "xxb")
-	s = strings.ReplaceAll(s, "2b", "xb")
-	s = strings.ReplaceAll(s, "1b", "xb")
-	s = strings.ReplaceAll(s, "3b", "xb")
-	s = strings.ReplaceAll(s, "6.7b", "xb")
-	s = strings.ReplaceAll(s, "33b", "xxb")
-	s = strings.ReplaceAll(s, "22b", "xxb")
-	s = strings.ReplaceAll(s, "405b", "xxb")
-	s = strings.ReplaceAll(s, "1.5b", "xb")
-	s = strings.ReplaceAll(s, "0.5b", "xb")
+	// Replace size tokens longest-first with unique placeholders.
+	// Order matters: longer numeric prefixes must be replaced before shorter
+	// ones that would otherwise consume part of the string.
+	replacements := []struct{ old, new string }{
+		{"405b", "s405"},
+		{"70b", "s70"},
+		{"72b", "s72"},
+		{"32b", "s32"},
+		{"33b", "s33"},
+		{"27b", "s27"},
+		{"22b", "s22"},
+		{"14b", "s14"},
+		{"6.7b", "s6.7"},
+		{"1.5b", "s1.5"},
+		{"0.5b", "s0.5"},
+		{"8b", "s8"},
+		{"7b", "s7"},
+		{"9b", "s9"},
+		{"3b", "s3"},
+		{"2b", "s2"},
+		{"1b", "s1"},
+	}
+	for _, r := range replacements {
+		s = strings.ReplaceAll(s, r.old, r.new)
+	}
 	return s
 }

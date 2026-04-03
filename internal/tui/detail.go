@@ -84,7 +84,8 @@ func formatDetailLine(label, value string) string {
 	return labelStyle.Render(label) + " " + valueStyle.Render(value)
 }
 
-// formatBytes converts bytes to a human-readable string.
+// formatBytes converts bytes to a human-readable string with appropriate
+// decimal precision for hardware decision-making.
 func formatBytes(b uint64) string {
 	const (
 		KB = 1024
@@ -95,13 +96,13 @@ func formatBytes(b uint64) string {
 
 	switch {
 	case b >= TB:
-		return fmt.Sprintf("%.1f TB", float64(b)/float64(TB))
+		return fmt.Sprintf("%.2f TB", float64(b)/float64(TB))
 	case b >= GB:
 		return fmt.Sprintf("%.1f GB", float64(b)/float64(GB))
 	case b >= MB:
-		return fmt.Sprintf("%.0f MB", float64(b)/float64(MB))
+		return fmt.Sprintf("%.1f MB", float64(b)/float64(MB))
 	case b >= KB:
-		return fmt.Sprintf("%.0f KB", float64(b)/float64(KB))
+		return fmt.Sprintf("%.1f KB", float64(b)/float64(KB))
 	default:
 		return fmt.Sprintf("%d B", b)
 	}

@@ -224,19 +224,24 @@ func TestHelpToggle(t *testing.T) {
 	}
 }
 
-// TestFormatBytes verifies the byte formatting function.
+// TestFormatBytes verifies the byte formatting function shows decimal precision
+// appropriate for hardware decision-making.
 func TestFormatBytes(t *testing.T) {
 	tests := []struct {
 		input    uint64
 		expected string
 	}{
 		{500, "500 B"},
-		{1024, "1 KB"},
-		{1536, "2 KB"},
-		{1048576, "1 MB"},
-		{524288000, "500 MB"},
+		{1024, "1.0 KB"},
+		{1536, "1.5 KB"},
+		{1048576, "1.0 MB"},
+		{1572864, "1.5 MB"},
+		{5242880, "5.0 MB"},
+		{524288000, "500.0 MB"},
 		{4294967296, "4.0 GB"},
 		{5368709120, "5.0 GB"},
+		{1099511627776, "1.00 TB"},
+		{1649267441664, "1.50 TB"},
 	}
 
 	for _, tc := range tests {

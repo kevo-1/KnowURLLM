@@ -74,13 +74,22 @@ func main() {
 }
 
 func formatBytes(b uint64) string {
-	const gb = 1 << 30
-	const mb = 1 << 20
+	const (
+		KB = 1024
+		MB = KB * 1024
+		GB = MB * 1024
+		TB = GB * 1024
+	)
+
 	switch {
-	case b >= gb:
-		return fmt.Sprintf("%.1f GB", float64(b)/gb)
-	case b >= mb:
-		return fmt.Sprintf("%.0f MB", float64(b)/mb)
+	case b >= TB:
+		return fmt.Sprintf("%.2f TB", float64(b)/float64(TB))
+	case b >= GB:
+		return fmt.Sprintf("%.1f GB", float64(b)/float64(GB))
+	case b >= MB:
+		return fmt.Sprintf("%.1f MB", float64(b)/float64(MB))
+	case b >= KB:
+		return fmt.Sprintf("%.1f KB", float64(b)/float64(KB))
 	default:
 		return fmt.Sprintf("%d B", b)
 	}

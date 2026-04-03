@@ -199,8 +199,9 @@ func filterResults(all []models.RankResult, opts models.FilterOptions) []models.
 			continue
 		}
 
-		// Minimum quality filter
-		if opts.MinQuality > 0 && r.Score.TotalScore < opts.MinQuality {
+		// Minimum quality filter — compare against QualityScore (benchmark-derived),
+		// not TotalScore (which includes hardware fit and throughput).
+		if opts.MinQuality > 0 && r.Score.QualityScore < opts.MinQuality {
 			continue
 		}
 

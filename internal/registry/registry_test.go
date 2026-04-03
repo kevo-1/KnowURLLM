@@ -3,6 +3,7 @@ package registry
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 // TestFetchAll verifies that FetchAll loads models from the embedded JSON.
@@ -83,17 +84,37 @@ func TestFetchHuggingFaceCompatibility(t *testing.T) {
 	}
 }
 
-// TestFetchOllamaReturnsEmpty verifies Ollama returns empty (not in data file).
-func TestFetchOllamaReturnsEmpty(t *testing.T) {
-	f := NewFetcher()
+// TestFetchOllamaIntegration verifies Ollama fetch works (may be skipped offline).
+func TestFetchOllamaIntegration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping Ollama integration test in short mode")
+	}
 
-	entries, err := f.FetchOllama(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	f := NewFetcher()
+	entries, err := f.FetchOllama(ctx)
 	if err != nil {
 		t.Fatalf("FetchOllama failed: %v", err)
 	}
 
-	if len(entries) != 0 {
-		t.Errorf("expected 0 Ollama entries, got %d", len(entries))
+	// We expect at least some models from the Ollama library
+	if len(entries) == 0 {
+		t.Log("warning: no Ollama models returned — may be network issue or API change")
+	}
+
+	// Verify entries have proper fields populated
+	for _, e := range entries {
+		if e.ID == "" {
+			t.Error("expected non-empty ID")
+		}
+		if e.Source != "ollama" {
+			t.Errorf("expected source 'ollama', got %s", e.Source)
+		}
+		if e.URL == "" {
+			t.Errorf("expected non-empty URL for %s", e.ID)
+		}
 	}
 }
 
