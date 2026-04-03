@@ -1,0 +1,64 @@
+{
+  "models": [
+    {
+      "name": "llama3.1:8b-instruct-q4_K_M",
+      "size": 4700000000,
+      "digest": "sha256:abc123def456",
+      "modified_at": "2024-08-01T10:00:00.000Z",
+      "details": {
+        "format": "gguf",
+        "family": "llama",
+        "parameter_size": "8B",
+        "quantization_level": "Q4_K_M"
+      }
+    },
+    {
+      "name": "llama3.1:70b-instruct-q4_K_M",
+      "size": 41000000000,
+      "digest": "sha256:ghi789jkl012",
+      "modified_at": "2024-08-01T10:00:00.000Z",
+      "details": {
+        "format": "gguf",
+        "family": "llama",
+        "parameter_size": "70B",
+        "quantization_level": "Q4_K_M"
+      }
+    },
+    {
+      "name": "mistral:7b-instruct-v0.3-q4_K_M",
+      "size": 4100000000,
+      "digest": "sha256:mno345pqr678",
+      "modified_at": "2024-07-15T08:00:00.000Z",
+      "details": {
+        "format": "gguf",
+        "family": "mistral",
+        "parameter_size": "7B",
+        "quantization_level": "Q4_K_M"
+      }
+    },
+    {
+      "name": "qwen2.5:7b-instruct-q4_K_M",
+      "size": 4200000000,
+      "digest": "sha256:stu901vwx234",
+      "modified_at": "2024-09-20T12:00:00.000Z",
+      "details": {
+        "format": "gguf",
+        "family": "qwen",
+        "parameter_size": "7B",
+        "quantization_level": "Q4_K_M"
+      }
+    },
+    {
+      "name": "phi3:3.8b-mini-4k-instruct-q4_K_M",
+      "size": 2200000000,
+      "digest": "sha256:yza567bcd890",
+      "modified_at": "2024-05-22T14:00:00.000Z",
+      "details": {
+        "format": "gguf",
+        "family": "phi",
+        "parameter_size": "3.8B",
+        "quantization_level": "Q4_K_M"
+      }
+    }
+  ]
+}

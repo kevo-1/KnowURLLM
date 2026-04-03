@@ -1,0 +1,96 @@
+[
+  {
+    "modelId": "meta-llama/Llama-3.1-8B-Instruct",
+    "downloads": 1250000,
+    "tags": ["text-generation", "conversational", "llama"],
+    "config": {
+      "architectures": ["LlamaForCausalLM"],
+      "max_position_embeddings": 8192
+    },
+    "cardData": {
+      "mmlu": 68.4,
+      "arena_elo": 1150.5
+    },
+    "siblings": [
+      {"rfilename": "model-Q4_K_M.gguf"},
+      {"rfilename": "model-Q8_0.gguf"},
+      {"rfilename": "model-FP16.gguf"}
+    ],
+    "pipeline_tag": "text-generation",
+    "createdAt": "2024-07-23T10:00:00.000Z"
+  },
+  {
+    "modelId": "meta-llama/Llama-3.1-70B-Instruct",
+    "downloads": 890000,
+    "tags": ["text-generation", "conversational", "llama"],
+    "config": {
+      "architectures": ["LlamaForCausalLM"],
+      "max_position_embeddings": 8192
+    },
+    "cardData": {
+      "mmlu": 79.2,
+      "arena_elo": 1210.3
+    },
+    "siblings": [
+      {"rfilename": "model-Q4_K_M.gguf"},
+      {"rfilename": "model-Q8_0.gguf"}
+    ],
+    "pipeline_tag": "text-generation",
+    "createdAt": "2024-07-23T10:00:00.000Z"
+  },
+  {
+    "modelId": "mistralai/Mistral-7B-Instruct-v0.3",
+    "downloads": 750000,
+    "tags": ["text-generation", "conversational", "mistral"],
+    "config": {
+      "architectures": ["MistralForCausalLM"],
+      "max_position_embeddings": 32768
+    },
+    "cardData": {
+      "mmlu": 60.1,
+      "arena_elo": 1095.2
+    },
+    "siblings": [
+      {"rfilename": "mistral-7b-instruct-v0.3-Q4_K_M.gguf"},
+      {"rfilename": "mistral-7b-instruct-v0.3-Q8_0.gguf"}
+    ],
+    "pipeline_tag": "text-generation",
+    "createdAt": "2024-06-15T08:00:00.000Z"
+  },
+  {
+    "modelId": "Qwen/Qwen2.5-7B-Instruct",
+    "downloads": 450000,
+    "tags": ["text-generation", "conversational", "qwen"],
+    "config": {
+      "architectures": ["Qwen2ForCausalLM"],
+      "max_position_embeddings": 32768
+    },
+    "cardData": {
+      "mmlu": 71.5,
+      "arena_elo": 1165.8
+    },
+    "siblings": [
+      {"rfilename": "qwen2.5-7b-instruct-q4_k_m.gguf"},
+      {"rfilename": "qwen2.5-7b-instruct-q8_0.gguf"}
+    ],
+    "pipeline_tag": "text-generation",
+    "createdAt": "2024-09-19T12:00:00.000Z"
+  },
+  {
+    "modelId": "microsoft/Phi-3-mini-4k-instruct",
+    "downloads": 320000,
+    "tags": ["text-generation", "conversational", "phi"],
+    "config": {
+      "architectures": ["Phi3ForCausalLM"],
+      "max_position_embeddings": 4096
+    },
+    "cardData": {
+      "mmlu": 55.3
+    },
+    "siblings": [
+      {"rfilename": "phi-3-mini-4k-instruct-q4_k_m.gguf"}
+    ],
+    "pipeline_tag": "text-generation",
+    "createdAt": "2024-05-21T14:00:00.000Z"
+  }
+]
