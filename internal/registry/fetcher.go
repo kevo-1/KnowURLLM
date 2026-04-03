@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/models"
 )
 
 //go:embed data

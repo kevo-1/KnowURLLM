@@ -5,7 +5,7 @@ package hardware
 import (
 	"fmt"
 
-	"github.com/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/models"
 	"github.com/NVIDIA/go-nvml/pkg/nvml"
 )
 

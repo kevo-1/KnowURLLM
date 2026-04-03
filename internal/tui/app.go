@@ -2,7 +2,7 @@
 package tui
 
 import (
-	"github.com/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/models"
 	tea "github.com/charmbracelet/bubbletea"
 )
 

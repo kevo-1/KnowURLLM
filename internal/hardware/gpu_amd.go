@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/models"
 )
 
 // detectAMDGPUs detects AMD GPUs using rocm-smi first, falling back to sysfs.

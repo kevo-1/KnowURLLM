@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/models"
 )
 
 // ──────────────────────────────────────────────

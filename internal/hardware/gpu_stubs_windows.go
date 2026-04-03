@@ -5,7 +5,7 @@ package hardware
 import (
 	"fmt"
 
-	"github.com/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/models"
 )
 
 // detectAppleGPU is not available on Windows — this is a stub.

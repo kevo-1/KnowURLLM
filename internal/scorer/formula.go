@@ -5,7 +5,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/models"
 )
 
 const (

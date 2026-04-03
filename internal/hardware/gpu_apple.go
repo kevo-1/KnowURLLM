@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/models"
 )
 
 // detectAppleGPU detects GPU information on macOS Apple Silicon.

@@ -3,7 +3,7 @@ package hardware
 import (
 	"runtime"
 
-	"github.com/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/models"
 )
 
 // gpu detects all GPUs on the system and returns them.

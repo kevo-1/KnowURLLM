@@ -1,4 +1,4 @@
-module github.com/KnowURLLM
+module github.com/kevo-1/KnowURLLM
 
 go 1.25.7
 

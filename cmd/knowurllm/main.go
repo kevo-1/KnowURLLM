@@ -10,10 +10,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/KnowURLLM/internal/hardware"
-	"github.com/KnowURLLM/internal/registry"
-	"github.com/KnowURLLM/internal/scorer"
-	"github.com/KnowURLLM/internal/tui"
+	"github.com/kevo-1/KnowURLLM/internal/hardware"
+	"github.com/kevo-1/KnowURLLM/internal/registry"
+	"github.com/kevo-1/KnowURLLM/internal/scorer"
+	"github.com/kevo-1/KnowURLLM/internal/tui"
 )
 
 func main() {

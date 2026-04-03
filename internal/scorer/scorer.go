@@ -4,7 +4,7 @@ package scorer
 import (
 	"errors"
 
-	"github.com/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/models"
 )
 
 // Scorer calculates how well each model runs on the given hardware.

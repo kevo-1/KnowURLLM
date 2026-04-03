@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/models"
 )
 
 // Detect returns the hardware profile of the current machine.

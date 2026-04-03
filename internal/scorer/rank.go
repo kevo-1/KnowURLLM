@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/models"
 )
 
 // Rank scores all models against the hardware profile.
