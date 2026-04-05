@@ -8,14 +8,15 @@ import (
 	"github.com/charmbracelet/bubbles/table"
 )
 
-// Column widths for the table.
+// Column widths for the table (minimum widths).
+// The Model column will expand to fill remaining width in formatTableRow().
 const (
-	colRankWidth  = 5
-	colModelWidth = 30
-	colSizeWidth  = 8
-	colTPSWidth   = 7
-	colScoreWidth = 9
-	colFitWidth   = 10
+	colRankWidth  = 5  // Rank: fixed
+	colModelWidth = 20 // Model: minimum, expands with available width
+	colSizeWidth  = 8  // Size: fixed
+	colTPSWidth   = 7  // TPS: fixed
+	colScoreWidth = 9  // Score: fixed
+	colFitWidth   = 10 // Fit: fixed
 )
 
 // tableColumns returns the column definitions for the results table.

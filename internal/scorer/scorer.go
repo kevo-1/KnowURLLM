@@ -8,20 +8,12 @@ import (
 )
 
 // Scorer calculates how well each model runs on the given hardware.
-type Scorer struct {
-	// Weights must sum to 1.0.
-	HardwareFitWeight float64 // default 0.50
-	ThroughputWeight  float64 // default 0.30
-	QualityWeight     float64 // default 0.20
-}
+// Weights are determined per-model based on entry.UseCase via weightsForUseCase().
+type Scorer struct{}
 
-// NewScorer returns a Scorer with default weights.
+// NewScorer returns a Scorer.
 func NewScorer() *Scorer {
-	return &Scorer{
-		HardwareFitWeight: 0.50,
-		ThroughputWeight:  0.30,
-		QualityWeight:     0.20,
-	}
+	return &Scorer{}
 }
 
 // validateInput checks that the inputs are valid.

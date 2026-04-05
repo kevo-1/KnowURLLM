@@ -10,15 +10,28 @@ import (
 	"github.com/shirou/gopsutil/v4/mem"
 )
 
-// memory detects total system RAM in bytes.
-func memory() (uint64, error) {
+// memory detects total system RAM in bytes and available RAM in bytes.
+// Returns (total, available, error).
+func memory() (uint64, uint64, error) {
 	// Try gopsutil first
 	v, err := mem.VirtualMemory()
 	if err == nil && v.Total > 0 {
-		return v.Total, nil
+		return v.Total, v.Available, nil
 	}
 
 	// Fallback: platform-specific detection
+	// Note: Fallback methods only provide total memory, not available
+	total, err := memoryTotal()
+	if err != nil {
+		return 0, 0, err
+	}
+	// Estimate available as 85% of total (conservative estimate)
+	available := uint64(float64(total) * 0.85)
+	return total, available, nil
+}
+
+// memoryTotal detects total system RAM in bytes (fallback path).
+func memoryTotal() (uint64, error) {
 	switch runtime.GOOS {
 	case "linux":
 		return memoryFromProcMeminfo()

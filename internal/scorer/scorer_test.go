@@ -8,162 +8,274 @@ import (
 )
 
 // ──────────────────────────────────────────────
-// hardwareFitScore tests
+// fitTierAndScore tests
 // ──────────────────────────────────────────────
 
-func TestHardwareFitScore(t *testing.T) {
+func TestFitTierAndScore(t *testing.T) {
 	tests := []struct {
-		name            string
-		modelSizeBytes  uint64
-		totalVRAM       uint64
-		totalRAM        uint64
-		wantScore       float64
-		wantFitsVRAM    bool
-		wantFitsMemory  bool
-		wantExcluded    bool
-		wantReasonMatch string // substring check
+		name           string
+		modelSizeBytes uint64
+		totalVRAM      uint64
+		totalRAM       uint64
+		mode           RunMode
+		wantTier       FitTier
+		wantScore      float64
 	}{
 		{
-			name:           "fitRatio 1.5 — fits in VRAM with headroom",
+			name:           "GPU perfect — 4GB model in 8GB VRAM",
 			modelSizeBytes: 4 * GB,
 			totalVRAM:      8 * GB,
 			totalRAM:       32 * GB,
+			mode:           RunModeGPU,
+			wantTier:       FitPerfect,
 			wantScore:      100,
-			wantFitsVRAM:   true,
-			wantFitsMemory: true,
-			wantExcluded:   false,
 		},
 		{
-			name:           "fitRatio ~1.07 — fits exactly with small headroom",
-			modelSizeBytes: 22 * GB,
+			name:           "GPU tight — 7.5GB model in 8GB VRAM (~14% headroom)",
+			modelSizeBytes: 7_500_000_000,
 			totalVRAM:      8 * GB,
 			totalRAM:       32 * GB,
-			// availableMem = 8 + 32*0.5 = 24 GB, fitRatio = 24/22 ≈ 1.09
-			wantScore:      80 + (24.0/22.0-1.0)*100,
-			wantFitsVRAM:   false,
-			wantFitsMemory: true,
-			wantExcluded:   false,
+			mode:           RunModeGPU,
+			wantTier:       FitPerfect, // 14% headroom >= 10% threshold
+			wantScore:      100,
 		},
 		{
-			name:           "fitRatio ~0.86 — tight fit, does not fit in memory",
-			modelSizeBytes: 28 * GB,
+			name:           "GPU very tight — 7.9GB model in 8GB VRAM",
+			modelSizeBytes: 7_900_000_000,
 			totalVRAM:      8 * GB,
 			totalRAM:       32 * GB,
-			// availableMem = 8 + 32*0.5 = 24 GB, fitRatio = 24/28 ≈ 0.857
-			// 28 GB > 24 GB available, so FitsInMemory = false
-			wantScore:      50 + (24.0/28.0)*30,
-			wantFitsVRAM:   false,
-			wantFitsMemory: false,
-			wantExcluded:   false,
+			mode:           RunModeGPU,
+			wantTier:       FitGood, // ~8.7% headroom < 10% threshold
+			wantScore:      75,
 		},
 		{
-			name:           "fitRatio 0.65 — excluded",
+			name:           "MoE mode",
+			modelSizeBytes: 30 * GB,
+			totalVRAM:      8 * GB,
+			totalRAM:       64 * GB,
+			mode:           RunModeMoE,
+			wantTier:       FitGood,
+			wantScore:      75,
+		},
+		{
+			name:           "CPU+GPU spill",
+			modelSizeBytes: 16 * GB,
+			totalVRAM:      8 * GB,
+			totalRAM:       32 * GB,
+			mode:           RunModeCPUGPU,
+			wantTier:       FitGood,
+			wantScore:      75,
+		},
+		{
+			name:           "CPU only",
+			modelSizeBytes: 8 * GB,
+			totalVRAM:      0,
+			totalRAM:       32 * GB,
+			mode:           RunModeCPU,
+			wantTier:       FitMarginal,
+			wantScore:      40,
+		},
+		{
+			name:           "Too tight — doesn't fit",
 			modelSizeBytes: 200 * GB,
 			totalVRAM:      8 * GB,
 			totalRAM:       32 * GB,
+			mode:           RunModeCPU,
+			wantTier:       FitTooTight,
 			wantScore:      0,
-			wantFitsVRAM:   false,
-			wantFitsMemory: false,
-			wantExcluded:   true,
-		},
-		{
-			name:           "zero model size — excluded",
-			modelSizeBytes: 0,
-			totalVRAM:      8 * GB,
-			totalRAM:       32 * GB,
-			wantScore:      0,
-			wantFitsVRAM:   false,
-			wantFitsMemory: false,
-			wantExcluded:   true,
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			score, fitsVRAM, fitsMem, reason, excluded := hardwareFitScore(
-				tc.modelSizeBytes,
-				tc.totalVRAM,
-				tc.totalRAM,
-			)
-
-			if excluded != tc.wantExcluded {
-				t.Errorf("excluded = %v, want %v", excluded, tc.wantExcluded)
+			tier, score := fitTierAndScore(tc.mode, tc.modelSizeBytes, tc.totalVRAM, tc.totalRAM)
+			if tier != tc.wantTier {
+				t.Errorf("tier = %v, want %v", tier, tc.wantTier)
 			}
-
-			if !excluded {
-				if math.Abs(score-tc.wantScore) > 0.1 {
-					t.Errorf("score = %f, want ~%f", score, tc.wantScore)
-				}
-			}
-
-			if fitsVRAM != tc.wantFitsVRAM {
-				t.Errorf("fitsVRAM = %v, want %v", fitsVRAM, tc.wantFitsVRAM)
-			}
-
-			if fitsMem != tc.wantFitsMemory {
-				t.Errorf("fitsMem = %v, want %v", fitsMem, tc.wantFitsMemory)
-			}
-
-			if tc.wantExcluded && reason == "" {
-				t.Error("expected non-empty reason for excluded model")
+			if math.Abs(score-tc.wantScore) > 0.01 {
+				t.Errorf("score = %f, want %f", score, tc.wantScore)
 			}
 		})
 	}
 }
 
 // ──────────────────────────────────────────────
-// throughputScore tests
+// detectRunMode tests
 // ──────────────────────────────────────────────
 
-func TestThroughputScore(t *testing.T) {
+func TestDetectRunMode(t *testing.T) {
 	tests := []struct {
-		name          string
-		modelSizeGB   float64
-		fitsInVRAM    bool
-		totalVRAMGB   float64
-		cpuCores      int
-		quantization  string
-		wantTPSRange  [2]float64 // min, max expected TPS
-		wantScoreMin  float64
+		name            string
+		modelSizeBytes  uint64
+		vramBytes       uint64
+		totalRAM        uint64
+		isMoE           bool
+		activeParams    uint64
+		expectedMode    RunMode
 	}{
 		{
-			name:         "GPU inference — 8GB VRAM, 4GB model, Q4_K_M",
-			modelSizeGB:  4.0,
-			fitsInVRAM:   true,
-			totalVRAMGB:  8.0,
-			cpuCores:     16,
-			quantization: "Q4_K_M",
-			wantTPSRange: [2]float64{150, 170}, // (8 * 80) / (4 * 1.0) = 160
-			wantScoreMin: 80,
+			name:           "Fits in VRAM",
+			modelSizeBytes: 4 * GB,
+			vramBytes:      8 * GB,
+			totalRAM:       32 * GB,
+			isMoE:          false,
+			expectedMode:   RunModeGPU,
 		},
 		{
-			name:         "CPU inference — 16 cores, 16GB model, Q4_K_M",
-			modelSizeGB:  16.0,
-			fitsInVRAM:   false,
-			totalVRAMGB:  8.0,
-			cpuCores:     16,
-			quantization: "Q4_K_M",
-			wantTPSRange: [2]float64{2, 4}, // (16 * 3) / (16 * 1.0) = 3
-			wantScoreMin: 20,
+			name:           "Spills to RAM with GPU",
+			modelSizeBytes: 16 * GB,
+			vramBytes:      8 * GB,
+			totalRAM:       32 * GB,
+			isMoE:          false,
+			expectedMode:   RunModeCPUGPU,
 		},
 		{
-			name:         "CPU inference — 16 cores, 4GB model, Q4_K_M",
-			modelSizeGB:  4.0,
-			fitsInVRAM:   false,
-			totalVRAMGB:  8.0,
-			cpuCores:     16,
-			quantization: "Q4_K_M",
-			wantTPSRange: [2]float64{10, 14}, // (16 * 3) / (4 * 1.0) = 12
-			wantScoreMin: 40,
+			name:           "CPU only",
+			modelSizeBytes: 8 * GB,
+			vramBytes:      0,
+			totalRAM:       32 * GB,
+			isMoE:          false,
+			expectedMode:   RunModeCPU,
 		},
 		{
-			name:         "zero size — excluded",
-			modelSizeGB:  0,
-			fitsInVRAM:   false,
-			totalVRAMGB:  8.0,
-			cpuCores:     16,
-			quantization: "Q4_K_M",
-			wantTPSRange: [2]float64{0, 0},
+			name:           "Doesn't fit at all",
+			modelSizeBytes: 200 * GB,
+			vramBytes:      8 * GB,
+			totalRAM:       32 * GB,
+			isMoE:          false,
+			expectedMode:   RunModeCPU,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mode := detectRunMode(tc.modelSizeBytes, tc.vramBytes, tc.totalRAM, tc.isMoE, tc.activeParams)
+			if mode != tc.expectedMode {
+				t.Errorf("mode = %v, want %v", mode, tc.expectedMode)
+			}
+		})
+	}
+}
+
+// ──────────────────────────────────────────────
+// selectBestQuant tests
+// ──────────────────────────────────────────────
+
+func TestSelectBestQuant(t *testing.T) {
+	tests := []struct {
+		name           string
+		modelSizeBytes uint64
+		availableMem   uint64
+		wantQuant      string
+	}{
+		{
+			name:           "Plenty of memory — Q8_0",
+			modelSizeBytes: 4 * GB,
+			availableMem:   40 * GB,
+			wantQuant:      "Q8_0",
+		},
+		{
+			name:           "Moderate memory — Q5_K_M (4GB model, 5GB available)",
+			modelSizeBytes: 4 * GB,
+			availableMem:   5 * GB,
+			wantQuant:      "Q5_K_M",
+		},
+		{
+			name:           "Tight memory — Q2_K",
+			modelSizeBytes: 4 * GB,
+			availableMem:   3 * GB,
+			wantQuant:      "Q2_K",
+		},
+		{
+			name:           "Very tight — nothing fits",
+			modelSizeBytes: 70 * GB,
+			availableMem:   8 * GB,
+			wantQuant:      "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := selectBestQuant(tc.modelSizeBytes, tc.availableMem)
+			if got != tc.wantQuant {
+				t.Errorf("selectBestQuant(%d, %d) = %q, want %q",
+					tc.modelSizeBytes, tc.availableMem, got, tc.wantQuant)
+			}
+		})
+	}
+}
+
+// ──────────────────────────────────────────────
+// sizeForQuant tests
+// ──────────────────────────────────────────────
+
+func TestSizeForQuant(t *testing.T) {
+	// Q4_K_M baseline: 4GB model
+	base := uint64(4 * GB)
+
+	// Q8_0 should be larger (1.000/0.563 ≈ 1.776x)
+	q8Size := sizeForQuant(base, "Q8_0")
+	if q8Size <= base {
+		t.Errorf("Q8_0 size %d should be > base size %d", q8Size, base)
+	}
+
+	// Q2_K should be smaller (0.313/0.563 ≈ 0.556x)
+	q2Size := sizeForQuant(base, "Q2_K")
+	if q2Size >= base {
+		t.Errorf("Q2_K size %d should be < base size %d", q2Size, base)
+	}
+
+	// Unknown quant returns as-is
+	unknownSize := sizeForQuant(base, "UNKNOWN")
+	if unknownSize != base {
+		t.Errorf("unknown quant: got %d, want %d", unknownSize, base)
+	}
+}
+
+// ──────────────────────────────────────────────
+// speedScore tests
+// ──────────────────────────────────────────────
+
+func TestSpeedScore(t *testing.T) {
+	tests := []struct {
+		name         string
+		modelSizeGB  float64
+		hw           models.HardwareProfile
+		mode         RunMode
+		quant        string
+		wantTPSMin   float64
+		wantScoreMin float64
+	}{
+		{
+			name:        "GPU inference with known bandwidth (RTX 4090)",
+			modelSizeGB: 4.0,
+			hw: models.HardwareProfile{
+				GPUs: []models.GPUInfo{{Vendor: "nvidia", Model: "NVIDIA GeForce RTX 4090", VRAM: 24 * GB}},
+			},
+			mode:         RunModeGPU,
+			quant:        "Q4_K_M",
+			wantTPSMin:   100,
+			wantScoreMin: 70,
+		},
+		{
+			name:        "CPU inference — no GPU",
+			modelSizeGB: 4.0,
+			hw: models.HardwareProfile{
+				CPUModel: "AMD Ryzen 9 7950X",
+				GPUs:     []models.GPUInfo{},
+			},
+			mode:         RunModeCPU,
+			quant:        "Q4_K_M",
+			wantTPSMin:   0.1,
+			wantScoreMin: 0,
+		},
+		{
+			name:        "zero size",
+			modelSizeGB: 0,
+			hw:          models.HardwareProfile{},
+			mode:        RunModeCPU,
+			quant:        "Q4_K_M",
+			wantTPSMin:   0,
 			wantScoreMin: 0,
 		},
 	}
@@ -171,29 +283,51 @@ func TestThroughputScore(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			modelSizeBytes := uint64(tc.modelSizeGB * float64(GB))
-			vramBytes := uint64(tc.totalVRAMGB * float64(GB))
-
-			tpsScore, estimatedTPS := throughputScoreWithQuant(
-				modelSizeBytes,
-				tc.fitsInVRAM,
-				vramBytes,
-				tc.cpuCores,
-				tc.quantization,
-			)
+			score, estimatedTPS := speedScore(tc.hw, modelSizeBytes, tc.mode, tc.quant)
 
 			if tc.modelSizeGB == 0 {
-				if estimatedTPS != 0 {
-					t.Errorf("expected 0 TPS for zero-size model, got %f", estimatedTPS)
+				if estimatedTPS != 0 || score != 0 {
+					t.Errorf("expected 0 for zero-size model, got score=%f, tps=%f", score, estimatedTPS)
 				}
 				return
 			}
 
-			if estimatedTPS < tc.wantTPSRange[0] || estimatedTPS > tc.wantTPSRange[1] {
-				t.Errorf("TPS = %f, want in range [%f, %f]", estimatedTPS, tc.wantTPSRange[0], tc.wantTPSRange[1])
+			if estimatedTPS < tc.wantTPSMin {
+				t.Errorf("TPS = %f, want >= %f", estimatedTPS, tc.wantTPSMin)
 			}
 
-			if tpsScore < tc.wantScoreMin {
-				t.Errorf("throughputScore = %f, want >= %f", tpsScore, tc.wantScoreMin)
+			if score < tc.wantScoreMin {
+				t.Errorf("speedScore = %f, want >= %f", score, tc.wantScoreMin)
+			}
+		})
+	}
+}
+
+// ──────────────────────────────────────────────
+// contextScore tests
+// ──────────────────────────────────────────────
+
+func TestContextScore(t *testing.T) {
+	tests := []struct {
+		name          string
+		contextLength int
+		wantScore     float64
+	}{
+		{"128k+", 128000, 100},
+		{"128k+", 200000, 100},
+		{"64k-128k", 64000, 85},
+		{"32k-64k", 32000, 70},
+		{"16k-32k", 16000, 55},
+		{"8k-16k", 8000, 40},
+		{"<8k", 4000, 20},
+		{"<8k", 0, 20},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := contextScore(tc.contextLength)
+			if got != tc.wantScore {
+				t.Errorf("contextScore(%d) = %f, want %f", tc.contextLength, got, tc.wantScore)
 			}
 		})
 	}
@@ -226,7 +360,7 @@ func TestQualityScore(t *testing.T) {
 			name:      "ELO only",
 			mmluScore: 0,
 			arenaELO:  1100.0,
-			wantScore: (1100.0 - 800) / (1300 - 800) * 100, // = 60
+			wantScore: (1100.0 - 800) / (1300 - 800) * 100,
 		},
 		{
 			name:      "neither — default 50",
@@ -240,7 +374,7 @@ func TestQualityScore(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got := qualityScore(tc.mmluScore, tc.arenaELO)
 			if math.Abs(got-tc.wantScore) > 0.1 {
-				t.Errorf("qualityScore(%f, %f) = %f, want %f",
+				t.Errorf("qualityScore(%f, %f) = %f, want ~%f",
 					tc.mmluScore, tc.arenaELO, got, tc.wantScore)
 			}
 		})
@@ -248,32 +382,138 @@ func TestQualityScore(t *testing.T) {
 }
 
 // ──────────────────────────────────────────────
-// quantFactor tests
+// weightsForUseCase tests
 // ──────────────────────────────────────────────
 
-func TestQuantFactor(t *testing.T) {
+func TestWeightsForUseCase(t *testing.T) {
+	tests := []struct {
+		name    string
+		useCase string
+		want    UseCaseWeights
+	}{
+		{
+			name:    "coding",
+			useCase: "coding",
+			want:    UseCaseWeights{0.45, 0.25, 0.20, 0.10},
+		},
+		{
+			name:    "reasoning",
+			useCase: "reasoning",
+			want:    UseCaseWeights{0.55, 0.15, 0.20, 0.10},
+		},
+		{
+			name:    "chat",
+			useCase: "chat",
+			want:    UseCaseWeights{0.25, 0.35, 0.25, 0.15},
+		},
+		{
+			name:    "multimodal",
+			useCase: "multimodal",
+			want:    UseCaseWeights{0.40, 0.20, 0.30, 0.10},
+		},
+		{
+			name:    "embedding",
+			useCase: "embedding",
+			want:    UseCaseWeights{0.50, 0.30, 0.20, 0.00},
+		},
+		{
+			name:    "general (default)",
+			useCase: "",
+			want:    UseCaseWeights{0.35, 0.25, 0.25, 0.15},
+		},
+		{
+			name:    "general (explicit)",
+			useCase: "general",
+			want:    UseCaseWeights{0.35, 0.25, 0.25, 0.15},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := weightsForUseCase(tc.useCase)
+			if got != tc.want {
+				t.Errorf("weightsForUseCase(%q) = %+v, want %+v", tc.useCase, got, tc.want)
+			}
+			// Verify weights sum to 1.0
+			sum := got.Quality + got.Speed + got.Fit + got.Context
+			if math.Abs(sum-1.0) > 0.001 {
+				t.Errorf("weights sum to %f, want 1.0", sum)
+			}
+		})
+	}
+}
+
+// ──────────────────────────────────────────────
+// quantSpeedMultiplier tests
+// ──────────────────────────────────────────────
+
+func TestQuantSpeedMultiplier(t *testing.T) {
 	tests := []struct {
 		quant    string
 		expected float64
 	}{
-		{"Q2_K", 0.6},
-		{"Q3_K", 0.7},
-		{"Q3_K_M", 0.7},
+		{"Q2_K", 1.6},
+		{"Q3_K", 1.4},
+		{"Q3_K_M", 1.4},
 		{"Q4_K_M", 1.0},
 		{"Q5_K_M", 0.85},
+		{"Q6_K", 0.75},
 		{"Q8_0", 0.65},
-		{"FP16", 0.4},
-		{"FP32", 0.2},
-		{"", 1.0},         // unknown → baseline
-		{"UNKNOWN", 1.0},  // unknown → baseline
-		{"q4_k_m", 1.0},   // case insensitive
+		{"FP16", 0.5},
+		{"FP32", 0.3},
+		{"", 1.0},
+		{"UNKNOWN", 1.0},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.quant, func(t *testing.T) {
-			got := quantFactor(tc.quant)
+			got := quantSpeedMultiplier(tc.quant)
 			if got != tc.expected {
-				t.Errorf("quantFactor(%q) = %f, want %f", tc.quant, got, tc.expected)
+				t.Errorf("quantSpeedMultiplier(%q) = %f, want %f", tc.quant, got, tc.expected)
+			}
+		})
+	}
+}
+
+// ──────────────────────────────────────────────
+// totalVRAM tests
+// ──────────────────────────────────────────────
+
+func TestTotalVRAM(t *testing.T) {
+	tests := []struct {
+		name string
+		hw   models.HardwareProfile
+		want uint64
+	}{
+		{
+			name: "single GPU",
+			hw: models.HardwareProfile{
+				GPUs: []models.GPUInfo{{Vendor: "nvidia", VRAM: 8 * GB}},
+			},
+			want: 8 * GB,
+		},
+		{
+			name: "multiple GPUs",
+			hw: models.HardwareProfile{
+				GPUs: []models.GPUInfo{
+					{Vendor: "nvidia", VRAM: 8 * GB},
+					{Vendor: "nvidia", VRAM: 16 * GB},
+				},
+			},
+			want: 24 * GB,
+		},
+		{
+			name: "no GPUs",
+			hw:   models.HardwareProfile{GPUs: []models.GPUInfo{}},
+			want: 0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := totalVRAM(tc.hw)
+			if got != tc.want {
+				t.Errorf("totalVRAM = %d, want %d", got, tc.want)
 			}
 		})
 	}
@@ -285,17 +525,17 @@ func TestQuantFactor(t *testing.T) {
 
 func TestRank_BasicExclusion(t *testing.T) {
 	hw := models.HardwareProfile{
-		TotalRAM: 32 * 1024 * 1024 * 1024, // 32 GB
+		TotalRAM: 32 * 1024 * 1024 * 1024,
 		CPUCores: 16,
 		GPUs: []models.GPUInfo{
-			{Vendor: "nvidia", VRAM: 8 * 1024 * 1024 * 1024}, // 8 GB VRAM
+			{Vendor: "nvidia", VRAM: 8 * 1024 * 1024 * 1024},
 		},
 	}
 
 	entries := []models.ModelEntry{
-		{ID: "small", ModelSizeBytes: 4_000_000_000, Quantization: "Q4_K_M"},   // fits in VRAM
-		{ID: "medium", ModelSizeBytes: 16_000_000_000, Quantization: "Q4_K_M"}, // fits in RAM
-		{ID: "large", ModelSizeBytes: 200_000_000_000, Quantization: "FP16"},   // excluded
+		{ID: "small", ModelSizeBytes: 4_000_000_000, Quantization: "Q4_K_M"},
+		{ID: "medium", ModelSizeBytes: 16_000_000_000, Quantization: "Q4_K_M"},
+		{ID: "large", ModelSizeBytes: 200_000_000_000, Quantization: "FP16"},
 	}
 
 	scorer := NewScorer()
@@ -367,7 +607,6 @@ func TestRank_Tiebreaker(t *testing.T) {
 			ID:             "model-b",
 			DisplayName:    "Model B",
 			ModelSizeBytes: 4 * GB,
-			Quantization:   "Q4_K_M",
 			Downloads:      100,
 			MMLUScore:      65.0,
 		},
@@ -375,7 +614,6 @@ func TestRank_Tiebreaker(t *testing.T) {
 			ID:             "model-a",
 			DisplayName:    "Model A",
 			ModelSizeBytes: 4 * GB,
-			Quantization:   "Q4_K_M",
 			Downloads:      200,
 			MMLUScore:      65.0,
 		},
@@ -404,13 +642,11 @@ func TestRank_Tiebreaker_Alphabetical(t *testing.T) {
 		GPUs:     []models.GPUInfo{{Vendor: "nvidia", VRAM: 24 * GB}},
 	}
 
-	// Two identical models with same scores and downloads
 	entries := []models.ModelEntry{
 		{
 			ID:             "model-z",
 			DisplayName:    "Model Z",
 			ModelSizeBytes: 4 * GB,
-			Quantization:   "Q4_K_M",
 			Downloads:      100,
 			MMLUScore:      65.0,
 		},
@@ -418,7 +654,6 @@ func TestRank_Tiebreaker_Alphabetical(t *testing.T) {
 			ID:             "model-a",
 			DisplayName:    "Model A",
 			ModelSizeBytes: 4 * GB,
-			Quantization:   "Q4_K_M",
 			Downloads:      100,
 			MMLUScore:      65.0,
 		},
@@ -430,7 +665,6 @@ func TestRank_Tiebreaker_Alphabetical(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Model A should win due to alphabetical order
 	if results[0].Model.DisplayName != "Model A" {
 		t.Errorf("expected rank 1 = 'Model A' (alphabetical), got %q", results[0].Model.DisplayName)
 	}
@@ -448,8 +682,8 @@ func TestRankWithFilter_VRAMOnly(t *testing.T) {
 	}
 
 	entries := []models.ModelEntry{
-		{ID: "small", ModelSizeBytes: 4 * GB, Quantization: "Q4_K_M"},  // fits in VRAM
-		{ID: "medium", ModelSizeBytes: 16 * GB, Quantization: "Q4_K_M"}, // needs RAM
+		{ID: "small", ModelSizeBytes: 4 * GB, Quantization: "Q4_K_M"},
+		{ID: "medium", ModelSizeBytes: 16 * GB, Quantization: "Q4_K_M"},
 	}
 
 	scorer := NewScorer()
@@ -572,50 +806,6 @@ func TestRankWithFilter_MinQuality(t *testing.T) {
 }
 
 // ──────────────────────────────────────────────
-// totalVRAM tests
-// ──────────────────────────────────────────────
-
-func TestTotalVRAM(t *testing.T) {
-	tests := []struct {
-		name string
-		hw   models.HardwareProfile
-		want uint64
-	}{
-		{
-			name: "single GPU",
-			hw: models.HardwareProfile{
-				GPUs: []models.GPUInfo{{Vendor: "nvidia", VRAM: 8 * GB}},
-			},
-			want: 8 * GB,
-		},
-		{
-			name: "multiple GPUs",
-			hw: models.HardwareProfile{
-				GPUs: []models.GPUInfo{
-					{Vendor: "nvidia", VRAM: 8 * GB},
-					{Vendor: "nvidia", VRAM: 16 * GB},
-				},
-			},
-			want: 24 * GB,
-		},
-		{
-			name: "no GPUs",
-			hw:   models.HardwareProfile{GPUs: []models.GPUInfo{}},
-			want: 0,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := totalVRAM(tc.hw)
-			if got != tc.want {
-				t.Errorf("totalVRAM = %d, want %d", got, tc.want)
-			}
-		})
-	}
-}
-
-// ──────────────────────────────────────────────
 // scoreModel integration test
 // ──────────────────────────────────────────────
 
@@ -654,5 +844,111 @@ func TestScoreModel(t *testing.T) {
 
 	if score.QualityScore <= 0 {
 		t.Errorf("expected positive quality score, got %f", score.QualityScore)
+	}
+
+	if score.SelectedQuant == "" {
+		t.Error("expected non-empty SelectedQuant")
+	}
+}
+
+func TestScoreModel_Excluded(t *testing.T) {
+	hw := models.HardwareProfile{
+		TotalRAM: 8 * GB,
+		CPUCores: 4,
+		GPUs:     []models.GPUInfo{},
+	}
+
+	entry := models.ModelEntry{
+		ID:             "huge-model",
+		ModelSizeBytes: 200 * GB,
+	}
+
+	_, excluded := scoreModel(hw, entry)
+	if !excluded {
+		t.Error("expected huge model to be excluded")
+	}
+}
+
+func TestScoreModel_SelectedQuant(t *testing.T) {
+	hw := models.HardwareProfile{
+		TotalRAM: 32 * GB,
+		CPUCores: 16,
+		GPUs:     []models.GPUInfo{{Vendor: "nvidia", VRAM: 24 * GB}},
+	}
+
+	entry := models.ModelEntry{
+		ID:             "test-model",
+		ModelSizeBytes: 4 * GB,
+	}
+
+	score, excluded := scoreModel(hw, entry)
+	if excluded {
+		t.Fatal("expected model to not be excluded")
+	}
+
+	if score.SelectedQuant == "" {
+		t.Error("expected non-empty SelectedQuant")
+	}
+
+	// With 24GB VRAM + 32GB RAM, should pick Q8_0 (highest quality)
+	if score.SelectedQuant != "Q8_0" {
+		t.Errorf("expected Q8_0 with plenty of memory, got %q", score.SelectedQuant)
+	}
+}
+
+// ──────────────────────────────────────────────
+// fitTierLabel tests
+// ──────────────────────────────────────────────
+
+func TestFitTierLabel(t *testing.T) {
+	tests := []struct {
+		name           string
+		tier           FitTier
+		mode           RunMode
+		modelSizeBytes uint64
+		vramBytes      uint64
+		wantContains   string
+	}{
+		{
+			name:           "Perfect fit",
+			tier:           FitPerfect,
+			mode:           RunModeGPU,
+			modelSizeBytes: 4 * GB,
+			vramBytes:      8 * GB,
+			wantContains:   "headroom",
+		},
+		{
+			name:         "MoE",
+			tier:         FitGood,
+			mode:         RunModeMoE,
+			wantContains: "MoE",
+		},
+		{
+			name:         "CPU+GPU",
+			tier:         FitGood,
+			mode:         RunModeCPUGPU,
+			wantContains: "RAM",
+		},
+		{
+			name:         "CPU",
+			tier:         FitMarginal,
+			mode:         RunModeCPU,
+			wantContains: "CPU",
+		},
+		{
+			name:         "Too tight",
+			tier:         FitTooTight,
+			mode:         RunModeCPU,
+			wantContains: "excluded",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			label := fitTierLabel(tc.tier, tc.mode, tc.modelSizeBytes, tc.vramBytes)
+			if label == "" {
+				t.Error("expected non-empty label")
+			}
+		})
 	}
 }

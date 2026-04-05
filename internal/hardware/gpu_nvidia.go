@@ -45,6 +45,7 @@ func detectNvidiaSMI() ([]models.GPUInfo, error) {
 
 // parseNvidiaSMIOutput parses the CSV output of nvidia-smi.
 // Expected format per line: "NVIDIA GeForce RTX 4090, 24576"
+// Handles GPU names with commas by taking the last field as VRAM.
 func parseNvidiaSMIOutput(raw string) []models.GPUInfo {
 	var gpus []models.GPUInfo
 
@@ -55,13 +56,14 @@ func parseNvidiaSMIOutput(raw string) []models.GPUInfo {
 			continue
 		}
 
-		parts := strings.SplitN(line, ",", 2)
-		if len(parts) != 2 {
+		// Split from the right to handle GPU names with commas
+		lastComma := strings.LastIndex(line, ",")
+		if lastComma == -1 {
 			continue
 		}
 
-		model := strings.TrimSpace(parts[0])
-		vramStr := strings.TrimSpace(parts[1])
+		model := strings.TrimSpace(line[:lastComma])
+		vramStr := strings.TrimSpace(line[lastComma+1:])
 
 		vramMiB, err := strconv.ParseUint(vramStr, 10, 64)
 		if err != nil {
@@ -72,7 +74,7 @@ func parseNvidiaSMIOutput(raw string) []models.GPUInfo {
 		vramBytes := vramMiB * 1024 * 1024
 
 		gpus = append(gpus, models.GPUInfo{
-			Vendor: "nvidia",
+			Vendor: normalizeGPUVendor(model),
 			Model:  model,
 			VRAM:   vramBytes,
 		})

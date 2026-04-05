@@ -20,6 +20,7 @@ type keyMap struct {
 	Select   key.Binding
 	Quit     key.Binding
 	Help     key.Binding
+	Expand   key.Binding
 }
 
 // keys defines the default key bindings.
@@ -56,11 +57,15 @@ var keys = keyMap{
 		key.WithKeys("?"),
 		key.WithHelp("?", "toggle help"),
 	),
+	Expand: key.NewBinding(
+		key.WithKeys("tab"),
+		key.WithHelp("tab", "expand detail"),
+	),
 }
 
 // ShortHelp returns keybindings for the help bar.
 func (k keyMap) ShortHelp() []key.Binding {
-	return []key.Binding{k.Up, k.Down, k.Search, k.VRAMOnly, k.Select, k.Quit, k.Help}
+	return []key.Binding{k.Up, k.Down, k.Search, k.Expand, k.VRAMOnly, k.Select, k.Quit, k.Help}
 }
 
 // FullHelp returns the full help (same as short for this TUI).
@@ -81,13 +86,18 @@ type model struct {
 	detailView  viewport.Model
 
 	// State
-	searching    bool
-	filters      models.FilterOptions
-	selected     *models.ModelEntry
-	ready        bool
-	windowWidth  int
-	windowHeight int
-	showHelp     bool
+	searching      bool
+	filters        models.FilterOptions
+	selected       *models.ModelEntry
+	ready          bool
+	windowWidth    int
+	windowHeight   int
+	showHelp       bool
+	detailExpanded bool // Whether detail panel shows all fields or condensed view
+
+	// Cached layout calculations
+	cachedTableWidth  int
+	cachedTableHeight int
 
 	// Key bindings
 	keys keyMap

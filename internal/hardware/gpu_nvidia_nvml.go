@@ -41,7 +41,7 @@ func detectNVMLFallback() ([]models.GPUInfo, error) {
 		}
 
 		gpus = append(gpus, models.GPUInfo{
-			Vendor: "nvidia",
+			Vendor: normalizeGPUVendor(name),
 			Model:  name,
 			VRAM:   memory.Total,
 		})

@@ -8,6 +8,15 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// LayoutMode represents the current layout configuration.
+type LayoutMode int
+
+const (
+	LayoutSmall LayoutMode = iota // Very small terminal, table only
+	LayoutNormal                  // Default vertical stack
+	LayoutWide                    // Side-by-side table and detail
+)
+
 // Update is the Bubble Tea update function.
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
@@ -39,6 +48,62 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds = append(cmds, cmd)
 
 	return m, tea.Batch(cmds...)
+}
+
+// layoutMode returns the current layout mode based on window dimensions.
+func (m model) LayoutMode() LayoutMode {
+	if m.windowWidth < 60 || m.windowHeight < 15 {
+		return LayoutSmall
+	}
+	if m.windowWidth >= 120 {
+		return LayoutWide
+	}
+	return LayoutNormal
+}
+
+// calcChromeHeights calculates the total height of all non-table elements.
+// Returns heights for: header, searchHeader, detailPanel, help, padding/margins.
+func (m model) calcChromeHeights() (header int, searchHeader int, detail int, help int, padding int) {
+	// Header: typically 1 line, but can be 2 with filter tags
+	header = 1
+	if m.filters.VRAMOnly || m.filters.SearchQuery != "" {
+		header = 2
+	}
+
+	// Search header: 1 line when inactive placeholder, 2 lines when active/showing query
+	if m.searching || m.filters.SearchQuery != "" {
+		searchHeader = 2
+	} else {
+		searchHeader = 1
+	}
+
+	// Detail panel height: varies by layout mode and expanded state
+	mode := m.LayoutMode()
+	switch mode {
+	case LayoutSmall:
+		detail = 0 // Hidden on small screens
+	case LayoutNormal:
+		if m.detailExpanded {
+			detail = 10
+		} else {
+			detail = 5
+		}
+	case LayoutWide:
+		// In wide mode, detail panel matches table height (calculated separately)
+		detail = 0 // Will be set equal to table height
+	}
+
+	// Help bar: 1 line normally, 3+ when full help shown
+	if m.showHelp {
+		help = 3
+	} else {
+		help = 1
+	}
+
+	// Padding/margins between sections
+	padding = 4
+
+	return
 }
 
 // handleKey processes all keyboard input.
@@ -94,6 +159,12 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.applyFilters()
 		return m, nil
 
+	case key.Matches(msg, m.keys.Expand):
+		m.detailExpanded = !m.detailExpanded
+		m.updateDetailViewSize()
+		m.updateTableSize()
+		return m, nil
+
 	case key.Matches(msg, m.keys.Select):
 		m.selectCurrentModel()
 		return m, tea.Quit
@@ -103,6 +174,8 @@ func (m model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, m.keys.Help):
 		m.showHelp = !m.showHelp
+		m.updateTableSize()
+		m.updateDetailViewSize()
 		return m, nil
 	}
 
@@ -143,17 +216,43 @@ func (m *model) updateTableSize() {
 	if !m.ready {
 		return
 	}
+
+	_, _, detailH, _, _ := m.calcChromeHeights()
+
 	// Calculate available height for the table
-	// Account for: header (1) + search header (2) + table header+separator (2) + detail panel (10) + help bar (2) + padding (4)
-	totalChromeHeight := 21
+	totalChromeHeight := m.calcTotalChromeHeight()
 	tableHeight := m.windowHeight - totalChromeHeight
+
+	// Enforce minimum table height
 	if tableHeight < 3 {
 		tableHeight = 3
 	}
-	// Cap table height to available terminal space (let internal scrolling handle overflow)
-	// Do NOT expand to show all results — that overflows the terminal
-	m.table.SetWidth(m.windowWidth - 4)
+
+	// In wide mode, cache table height for detail panel sizing
+	mode := m.LayoutMode()
+	if mode == LayoutWide && detailH == 0 {
+		m.cachedTableHeight = tableHeight
+	}
+
+	// Calculate dynamic table width (account for padding)
+	tableWidth := m.windowWidth - 4
+	if mode == LayoutWide {
+		// Table takes ~65% of width
+		tableWidth = (m.windowWidth * 2 / 3) - 4
+	}
+	if tableWidth < 40 {
+		tableWidth = 40 // Minimum usable width
+	}
+	m.cachedTableWidth = tableWidth
+
+	m.table.SetWidth(tableWidth)
 	m.table.SetHeight(tableHeight)
+}
+
+// calcTotalChromeHeight returns the sum of all non-table element heights.
+func (m model) calcTotalChromeHeight() int {
+	headerH, searchH, detailH, helpH, padding := m.calcChromeHeights()
+	return headerH + searchH + detailH + helpH + padding
 }
 
 // updateDetailViewSize adjusts the detail viewport size.
@@ -161,8 +260,31 @@ func (m *model) updateDetailViewSize() {
 	if !m.ready {
 		return
 	}
-	m.detailView.Width = m.windowWidth - 8
-	m.detailView.Height = 8
+
+	mode := m.LayoutMode()
+
+	switch mode {
+	case LayoutSmall:
+		// Hidden on small screens
+		m.detailView.Width = 0
+		m.detailView.Height = 0
+	case LayoutWide:
+		// In wide mode, detail panel takes right side, same height as table
+		m.detailView.Width = (m.windowWidth / 3) - 4 // ~33% of width
+		if m.cachedTableHeight > 0 {
+			m.detailView.Height = m.cachedTableHeight
+		} else {
+			m.detailView.Height = 10 // Fallback
+		}
+	case LayoutNormal:
+		// Normal vertical stack: detail panel below table
+		m.detailView.Width = m.windowWidth - 8
+		if m.detailExpanded {
+			m.detailView.Height = 10
+		} else {
+			m.detailView.Height = 5
+		}
+	}
 }
 
 // filterResults applies the filter options to the given results.

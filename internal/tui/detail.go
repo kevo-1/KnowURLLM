@@ -8,22 +8,62 @@ import (
 )
 
 // renderDetailPanel renders the detail panel for the currently focused model.
-func renderDetailPanel(result models.RankResult, width int) string {
+// The expanded parameter controls whether all fields or only key fields are shown.
+func renderDetailPanel(result models.RankResult, width int, expanded bool) string {
 	if width < 40 {
 		return ""
 	}
 
+	if expanded {
+		return renderDetailPanelExpanded(result, width)
+	}
+	return renderDetailPanelCondensed(result, width)
+}
+
+// renderDetailPanelCondensed renders a compact view with only key information.
+func renderDetailPanelCondensed(result models.RankResult, width int) string {
 	m := result.Model
 	s := result.Score
 
 	var lines []string
 
-	// Fit reason
-	lines = append(lines, formatDetailLine("Fit:", s.FitReason))
+	// Fit badge and reason
+	fitBadge := renderFitBadge(s.FitCategory)
+	lines = append(lines, formatDetailLine("Fit:", fitBadge+" "+s.FitReason))
 
-	// Score breakdown
-	scoreLine := fmt.Sprintf("Total %.1f  |  Fit %.1f  |  TPS %.1f  |  Quality %.1f",
+	// Total score with breakdown
+	scoreLine := fmt.Sprintf("Total %.1f  |  Fit %.1f  |  Speed %.1f  |  Quality %.1f",
 		s.TotalScore, s.HardwareFitScore, s.ThroughputScore, s.QualityScore)
+	lines = append(lines, formatDetailLine("Score:", scoreLine))
+
+	// Performance estimate
+	lines = append(lines, formatDetailLine("Perf:", formatTPS(s.EstimatedTPS)))
+
+	// Model size and quantization
+	sizeLine := formatBytes(m.ModelSizeBytes)
+	if m.Quantization != "" {
+		sizeLine += "  |  Quant: " + m.Quantization
+	}
+	lines = append(lines, formatDetailLine("Size:", sizeLine))
+
+	content := strings.Join(lines, "\n")
+	return detailStyle.Width(width - 4).Render(content)
+}
+
+// renderDetailPanelExpanded renders the full detail view with all fields.
+func renderDetailPanelExpanded(result models.RankResult, width int) string {
+	m := result.Model
+	s := result.Score
+
+	var lines []string
+
+	// Fit reason with category badge
+	fitBadge := renderFitBadge(s.FitCategory)
+	lines = append(lines, formatDetailLine("Fit:", fitBadge+" "+s.FitReason))
+
+	// Score breakdown — now with 5 dimensions
+	scoreLine := fmt.Sprintf("Total %.1f  |  Fit %.1f  |  Speed %.1f  |  Quality %.1f  |  Context %.1f",
+		s.TotalScore, s.HardwareFitScore, s.ThroughputScore, s.QualityScore, s.ContextScore)
 	lines = append(lines, formatDetailLine("Score:", scoreLine))
 
 	// Performance estimate
@@ -119,4 +159,20 @@ func formatContext(n int) string {
 // formatTPS formats tokens-per-second to a string like "~42 tok/s".
 func formatTPS(f float64) string {
 	return fmt.Sprintf("~%d tok/s", int(f))
+}
+
+// renderFitBadge renders a colored badge for the fit category.
+func renderFitBadge(category string) string {
+	switch category {
+	case "Perfect":
+		return "[Perfect]"
+	case "Good":
+		return "[Good]"
+	case "Marginal":
+		return "[Marginal]"
+	case "Too Tight":
+		return "[Too Tight]"
+	default:
+		return "[" + category + "]"
+	}
 }

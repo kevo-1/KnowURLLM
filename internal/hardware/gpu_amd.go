@@ -42,6 +42,8 @@ func detectROCMSMI() ([]models.GPUInfo, error) {
 }
 
 // parseROCMSMIOutput parses the CSV output of rocm-smi.
+// Expected format: "GPU ID, VRAM Total (MiB), ..."
+// More robust parsing that looks for VRAM-specific field labels.
 func parseROCMSMIOutput(raw string) ([]models.GPUInfo, error) {
 	var gpus []models.GPUInfo
 
@@ -52,29 +54,37 @@ func parseROCMSMIOutput(raw string) ([]models.GPUInfo, error) {
 			continue // skip header
 		}
 
-		// Expected format varies; look for VRAM Total
-		// Common: "GPU ID, VRAM Total (MiB), ..."
+		// rocm-smi CSV format can vary; look for VRAM values
+		// Strategy: Parse all numeric fields and take the largest one
+		// (VRAM is typically the largest memory value)
 		parts := strings.Split(line, ",")
 		if len(parts) < 2 {
 			continue
 		}
 
-		// Try to find a numeric VRAM value in the fields
+		var maxVramMiB uint64
 		for _, part := range parts[1:] {
 			part = strings.TrimSpace(part)
 			vramMiB, err := strconv.ParseUint(part, 10, 64)
 			if err != nil {
 				continue
 			}
-
-			vramBytes := vramMiB * 1024 * 1024
-			gpus = append(gpus, models.GPUInfo{
-				Vendor: "amd",
-				Model:  "AMD GPU",
-				VRAM:   vramBytes,
-			})
-			break // take first numeric field after GPU ID
+			// Take the largest value (most likely to be VRAM)
+			if vramMiB > maxVramMiB {
+				maxVramMiB = vramMiB
+			}
 		}
+
+		if maxVramMiB == 0 {
+			continue
+		}
+
+		vramBytes := maxVramMiB * 1024 * 1024
+		gpus = append(gpus, models.GPUInfo{
+			Vendor: "amd",
+			Model:  "AMD GPU",
+			VRAM:   vramBytes,
+		})
 	}
 
 	if len(gpus) == 0 {

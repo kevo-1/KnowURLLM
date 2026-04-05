@@ -1,6 +1,7 @@
 package hardware
 
 import (
+	"fmt"
 	"runtime"
 
 	"github.com/kevo-1/KnowURLLM/internal/models"
@@ -11,7 +12,11 @@ import (
 func gpu() ([]models.GPUInfo, error) {
 	switch runtime.GOOS {
 	case "darwin":
-		return detectAppleGPU()
+		gpus, err := detectAppleGPU()
+		if err != nil {
+			return []models.GPUInfo{}, NoGPUError(err)
+		}
+		return gpus, nil
 	case "linux":
 		// Merge NVIDIA and AMD results
 		nvidiaGPUs, nvidiaErr := detectNvidiaGPUs()
@@ -21,20 +26,24 @@ func gpu() ([]models.GPUInfo, error) {
 
 		// If both failed, return error with empty slice
 		if nvidiaErr != nil && amdErr != nil {
-			return gpus, amdErr // return one of the errors
+			return gpus, NoGPUError(fmt.Errorf("nvidia: %v, amd: %v", nvidiaErr, amdErr))
 		}
-		// If one failed, return the error but still return results from the other
+		// If one failed, return partial error but still return results from the other
 		if nvidiaErr != nil {
-			return gpus, nvidiaErr
+			return gpus, PartialGPUError(nvidiaErr)
 		}
 		if amdErr != nil {
-			return gpus, amdErr
+			return gpus, PartialGPUError(amdErr)
 		}
 		return gpus, nil
 	case "windows":
 		// NVIDIA only on Windows; AMD Windows detection is out of scope
-		return detectNvidiaGPUs()
+		gpus, err := detectNvidiaGPUs()
+		if err != nil {
+			return []models.GPUInfo{}, NoGPUError(err)
+		}
+		return gpus, nil
 	default:
-		return nil, nil
+		return []models.GPUInfo{}, NoGPUError(fmt.Errorf("unsupported platform: %s", runtime.GOOS))
 	}
 }

@@ -64,40 +64,80 @@ When you select a model and press **Enter**, it prints details and the `ollama r
 
 ## Scoring Formula
 
-Models are scored on a 0–100 scale using three weighted components:
+Models are scored on a 0–100 scale using four weighted components inspired by [llmfit](https://github.com/AlexsJones/llmfit):
 
-| Component        | Weight | Description                                           |
-| ---------------- | ------ | ----------------------------------------------------- |
-| **Hardware Fit** | 50%    | How comfortably the model fits in VRAM + system RAM   |
-| **Throughput**   | 30%    | Estimated tokens/sec based on model size and hardware |
-| **Quality**      | 20%    | Benchmark scores (MMLU, Chatbot Arena ELO)            |
+| Component        | Weight (General) | Description                                           |
+| ---------------- | ---------------- | ----------------------------------------------------- |
+| **Fit**          | 40%              | How comfortably the model fits in VRAM + system RAM   |
+| **Speed**        | 30%              | Estimated throughput based on backend and model size  |
+| **Quality**      | 20%              | Benchmark scores (MMLU, Chatbot Arena ELO) + signals  |
+| **Context**      | 10%              | Context window capability for the use case            |
 
-### Hardware Fit
+Weights change based on the selected **use-case profile**:
 
-| Fit Ratio | Score  | Behavior                                           |
-| --------- | ------ | -------------------------------------------------- |
-| < 0.7     | 0      | **Excluded** — model won't fit in available memory |
-| 0.7–1.0   | 50–80  | Fits with RAM overflow (VRAM + 50% system RAM)     |
-| 1.0–1.3   | 80–100 | Fits fully in memory                               |
-| ≥ 1.3     | 100    | Fits in VRAM with headroom                         |
+| Profile      | Quality | Speed | Fit   | Context | Best For                          |
+| ------------ | ------- | ----- | ----- | ------- | --------------------------------- |
+| **General**  | 20%     | 30%   | 40%   | 10%     | Balanced everyday use             |
+| **Coding**   | 25%     | 35%   | 25%   | 15%     | Code generation, needs speed      |
+| **Reasoning**| 35%     | 20%   | 30%   | 15%     | Complex reasoning, quality-first  |
+| **Chat**     | 15%     | 40%   | 35%   | 10%     | Conversational, responsiveness    |
+| **Multimodal**| 30%    | 25%   | 30%   | 15%     | Vision/audio, balanced            |
+| **Embedding**| 20%     | 35%   | 35%   | 10%     | Batch processing, throughput      |
 
-### Throughput
+### Fit Score (Hardware Fit)
 
-Estimated using a log-scale formula based on:
+| Category    | Score Range | Description                                        |
+| ----------- | ----------- | -------------------------------------------------- |
+| **Perfect** | 95–100      | Fits in VRAM with 50%+ headroom                    |
+| **Good**    | 80–95       | Fits in VRAM with 20-50% headroom, or needs RAM overflow with ratio ≥1.0 |
+| **Marginal**| 65–80       | Tight fit in VRAM (<20% headroom) or needs RAM overflow (ratio 0.85-1.0) |
+| **Too Tight**| 50–65      | Very tight fit, needs significant RAM overflow (ratio 0.7-0.85) |
+| **Excluded**| 0           | **Won't run** — model won't fit in available memory (ratio < 0.7) |
 
-- **GPU inference**: `(VRAM_GB × 80) / (model_size_GB × quant_factor)`
-- **CPU inference**: `(cpu_cores × 3.0) / (model_size_GB × quant_factor)`
+### Speed Estimation
 
-Quantization factors: Q4_K_M = 1.0× (baseline), Q5 = 0.85×, Q3 = 0.7×, Q2 = 0.6×, FP16 = 0.4×, FP32 = 0.2×
+Speed is estimated using backend-specific baselines (tokens/sec):
 
-### Quality
+| Backend | Baseline (tok/s) |
+| ------- | ---------------- |
+| **CUDA** (NVIDIA) | 220 |
+| **ROCm** (AMD)    | 180 |
+| **Metal** (Apple) | 160 |
+| **SYCL** (Intel)  | 100 |
+| **CPU ARM**       | 90  |
+| **CPU x86**       | 70  |
 
-| Available Data        | Formula                                    |
+Formula: `(backend_baseline / model_size_gb) × efficiency_factor(0.55) × quant_factor`
+
+Penalties:
+- CPU offload (partial): ×0.5
+- CPU-only (no GPU): ×0.3
+- MoE expert switching: ×0.8
+
+### Quality Score
+
+Quality is calculated from:
+- **80% benchmark performance**: MMLU and Chatbot Arena ELO scores
+- **20% parameter count**: Larger models get a bonus (logarithmic scaling)
+- **Quantization adjustment**: Higher quantization (Q8, FP16) gets a small bonus, lower quantization (Q3, Q2) gets a penalty
+
+| Available Data        | Base Formula                               |
 | --------------------- | ------------------------------------------ |
 | Both MMLU + Arena ELO | `0.6 × MMLU + 0.4 × normalized_ELO`        |
 | MMLU only             | `MMLU`                                     |
 | Arena ELO only        | `normalized_ELO` (scaled 800–1300 → 0–100) |
 | Neither               | `50` (neutral default)                     |
+
+Final: `0.8 × base_quality + 0.2 × param_bonus + quant_adjustment`
+
+### Context Score
+
+| Context Length | Score | Category  |
+| -------------- | ----- | --------- |
+| ≥ 128k tokens  | 100   | Perfect   |
+| 32k–128k       | 75–100| Good      |
+| 8k–32k         | 50–75 | Marginal  |
+| < 8k           | 0–50  | Too Tight |
 
 ## Benchmark Database
 

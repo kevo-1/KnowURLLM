@@ -139,7 +139,19 @@ func compareResults(a, b models.RankResult) int {
 		return -1 // a wins
 	}
 
-	// Tiebreaker 1: Higher QualityScore wins
+	// Tiebreaker 1: Higher FitCategory wins (Perfect > Good > Marginal > Too Tight)
+	catOrder := map[string]int{"Perfect": 4, "Good": 3, "Marginal": 2, "Too Tight": 1}
+	aCatOrder := catOrder[a.Score.FitCategory]
+	bCatOrder := catOrder[b.Score.FitCategory]
+	catDiff := bCatOrder - aCatOrder
+	if catDiff > 0 {
+		return 1
+	}
+	if catDiff < 0 {
+		return -1
+	}
+
+	// Tiebreaker 2: Higher QualityScore wins
 	qDiff := b.Score.QualityScore - a.Score.QualityScore
 	if qDiff > 0 {
 		return 1
@@ -148,7 +160,7 @@ func compareResults(a, b models.RankResult) int {
 		return -1
 	}
 
-	// Tiebreaker 2: Higher Downloads wins
+	// Tiebreaker 3: Higher Downloads wins
 	dDiff := b.Model.Downloads - a.Model.Downloads
 	if dDiff > 0 {
 		return 1
@@ -157,6 +169,6 @@ func compareResults(a, b models.RankResult) int {
 		return -1
 	}
 
-	// Tiebreaker 3: Alphabetical DisplayName (ascending)
+	// Tiebreaker 4: Alphabetical DisplayName (ascending)
 	return strings.Compare(a.Model.DisplayName, b.Model.DisplayName)
 }

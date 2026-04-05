@@ -4,7 +4,6 @@ package hardware
 import (
 	"fmt"
 	"runtime"
-	"strings"
 
 	"github.com/kevo-1/KnowURLLM/internal/models"
 )
@@ -24,27 +23,40 @@ func Detect() (models.HardwareProfile, error) {
 	profile.CPUCores = cpuCores
 
 	// Detect memory
-	totalRAM, err := memory()
+	totalRAM, availableRAM, err := memory()
 	if err != nil {
 		return profile, fmt.Errorf("memory detection failed: %w", err)
 	}
 	profile.TotalRAM = totalRAM
+	profile.AvailableRAM = availableRAM
 
 	// Detect GPUs (non-critical failure)
 	gpus, gpuErr := gpu()
 	if gpuErr != nil {
 		// Log GPU detection failure but still return the rest of the profile
 		profile.GPUs = []models.GPUInfo{} // zeroed, not nil
+		profile.TotalVRAM = 0
+		profile.AvailableVRAM = 0
 		// Return profile with wrapped GPU error
 		return profile, fmt.Errorf("gpu detection failed (continuing with CPU-only mode): %w", gpuErr)
 	}
 	profile.GPUs = gpus
 
+	// Calculate total and available VRAM from detected GPUs
+	var totalVRAM uint64
+	var availableVRAM uint64
+	for _, gpu := range gpus {
+		totalVRAM += gpu.VRAM
+		availableVRAM += calculateAvailableVRAM(gpu)
+	}
+	profile.TotalVRAM = totalVRAM
+	profile.AvailableVRAM = availableVRAM
+
 	// Set platform
 	profile.Platform = runtime.GOOS
 
-	// Detect Apple Silicon
-	profile.IsAppleSilicon = runtime.GOOS == "darwin" && strings.Contains(strings.ToLower(cpuModel), "apple")
+	// Detect Apple Silicon using runtime.GOARCH (more reliable than string matching)
+	profile.IsAppleSilicon = runtime.GOOS == "darwin" && runtime.GOARCH == "arm64"
 
 	return profile, nil
 }

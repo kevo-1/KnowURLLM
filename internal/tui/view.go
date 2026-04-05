@@ -14,6 +14,29 @@ func (m model) View() string {
 		return "\n  Initializing..."
 	}
 
+	mode := m.LayoutMode()
+
+	switch mode {
+	case LayoutSmall:
+		return m.renderSmallLayout()
+	case LayoutWide:
+		return m.renderWideLayout()
+	default:
+		return m.renderNormalLayout()
+	}
+}
+
+// renderSmallLayout renders only the table for very small terminals.
+func (m model) renderSmallLayout() string {
+	var sections []string
+	sections = append(sections, m.renderCompactHeader())
+	sections = append(sections, m.renderStyledTable())
+	sections = append(sections, m.renderCompactHelp())
+	return strings.Join(sections, "\n")
+}
+
+// renderNormalLayout renders the default vertical stack layout.
+func (m model) renderNormalLayout() string {
 	var sections []string
 
 	// Header
@@ -25,12 +48,12 @@ func (m model) View() string {
 	// Table
 	sections = append(sections, m.renderStyledTable())
 
-	// Detail panel (if there are results)
-	if len(m.filteredResults) > 0 {
+	// Detail panel (if there are results and not hidden)
+	if len(m.filteredResults) > 0 && m.detailView.Height > 0 {
 		cursor := m.table.Cursor()
 		if cursor >= 0 && cursor < len(m.filteredResults) {
 			result := m.filteredResults[cursor]
-			detailContent := renderDetailPanel(result, m.windowWidth)
+			detailContent := renderDetailPanel(result, m.detailView.Width, m.detailExpanded)
 			m.detailView.SetContent(detailContent)
 			sections = append(sections, m.detailView.View())
 		}
@@ -40,6 +63,54 @@ func (m model) View() string {
 	sections = append(sections, m.renderHelp())
 
 	return strings.Join(sections, "\n")
+}
+
+// renderWideLayout renders table and detail side-by-side.
+func (m model) renderWideLayout() string {
+	var sections []string
+
+	// Header (full width)
+	sections = append(sections, m.renderHeader())
+
+	// Search header (full width)
+	sections = append(sections, m.searchHeader())
+
+	// Side-by-side table and detail
+	if len(m.filteredResults) > 0 {
+		tableSection := m.renderStyledTable()
+
+		cursor := m.table.Cursor()
+		var detailSection string
+		if cursor >= 0 && cursor < len(m.filteredResults) && m.detailView.Height > 0 {
+			result := m.filteredResults[cursor]
+			detailContent := renderDetailPanel(result, m.detailView.Width, m.detailExpanded)
+			m.detailView.SetContent(detailContent)
+			detailSection = m.detailView.View()
+		}
+
+		// Join side-by-side
+		sideBySide := lipgloss.JoinHorizontal(lipgloss.Top, tableSection, detailSection)
+		sections = append(sections, sideBySide)
+	} else {
+		sections = append(sections, m.renderStyledTable())
+	}
+
+	// Help bar
+	sections = append(sections, m.renderHelp())
+
+	return strings.Join(sections, "\n")
+}
+
+// renderCompactHeader renders a minimal header for small screens.
+func (m model) renderCompactHeader() string {
+	title := titleStyle.Render("KnowURLLM")
+	count := mutedTextStyle.Render(fmt.Sprintf("(%d)", len(m.filteredResults)))
+	return lipgloss.JoinHorizontal(lipgloss.Center, title, " ", count)
+}
+
+// renderCompactHelp renders a single-line help for small screens.
+func (m model) renderCompactHelp() string {
+	return helpStyle.Render("↑↓:nav /:search v:VRAM enter:select q:quit")
 }
 
 // renderHeader renders the top bar with title and result count.
@@ -61,7 +132,7 @@ func (m model) renderHeader() string {
 // renderFilterStatus shows the current active filter state prominently.
 func (m model) renderFilterStatus() string {
 	if !m.filters.VRAMOnly && m.filters.SearchQuery == "" {
-		return mutedTextStyle.Render("[no filters]")
+		return ""
 	}
 
 	var parts []string
@@ -100,17 +171,21 @@ func (m model) renderStyledTable() string {
 
 	// Column header row
 	colHeaders := []string{"Rank", "Model", "Size", "TPS", "Score", "Fit"}
-	headerRow := headerStyle.Render(formatTableRow(colHeaders))
+	headerRow := headerStyle.Render(formatTableRow(colHeaders, m.cachedTableWidth))
 	styledRows = append(styledRows, headerRow)
 
 	// Separator
-	styledRows = append(styledRows, strings.Repeat("─", m.windowWidth-4))
+	sepWidth := m.cachedTableWidth
+	if sepWidth < 40 {
+		sepWidth = m.windowWidth - 4
+	}
+	styledRows = append(styledRows, strings.Repeat("─", sepWidth))
 
 	// Data rows — only visible range
 	for i := start; i < end; i++ {
 		r := m.filteredResults[i]
 		isSelected := i == cursor
-		row := buildStyledRow(r, isSelected)
+		row := buildStyledRow(r, isSelected, m.cachedTableWidth)
 		styledRows = append(styledRows, row)
 	}
 
@@ -128,7 +203,7 @@ func (m model) renderStyledTable() string {
 }
 
 // buildStyledRow creates a styled table row string.
-func buildStyledRow(r models.RankResult, isSelected bool) string {
+func buildStyledRow(r models.RankResult, isSelected bool, availableWidth int) string {
 	rank := formatRank(r.Rank)
 	modelName := truncate(r.Model.DisplayName, colModelWidth)
 	size := formatBytes(r.Model.ModelSizeBytes)
@@ -138,7 +213,7 @@ func buildStyledRow(r models.RankResult, isSelected bool) string {
 
 	cols := []string{rank, modelName, size, tps, score, fit}
 
-	row := formatTableRow(cols)
+	row := formatTableRow(cols, availableWidth)
 	if isSelected {
 		row = selectedRowStyle.Render(row)
 	}
@@ -147,15 +222,43 @@ func buildStyledRow(r models.RankResult, isSelected bool) string {
 	if !isSelected && r.Rank <= 3 {
 		goldScore := goldStyle.Render(score)
 		cols[4] = goldScore
-		row = formatTableRow(cols)
+		row = formatTableRow(cols, availableWidth)
 	}
 
 	return row
 }
 
-// formatTableRow formats a row of columns with consistent spacing.
-func formatTableRow(cols []string, opts ...lipgloss.Style) string {
-	widths := []int{colRankWidth, colModelWidth, colSizeWidth, colTPSWidth, colScoreWidth, colFitWidth}
+// formatTableRow formats a row of columns with dynamic spacing.
+func formatTableRow(cols []string, availableWidth int) string {
+	// Calculate column widths: fixed minimums + remainder to Model column
+	minWidths := []int{
+		colRankWidth,  // Rank: 5
+		colModelWidth, // Model: 30 (gets remainder)
+		colSizeWidth,  // Size: 8
+		colTPSWidth,   // TPS: 7
+		colScoreWidth, // Score: 9
+		colFitWidth,   // Fit: 10
+	}
+
+	// Calculate total minimum width needed
+	totalMinWidth := 0
+	for _, w := range minWidths {
+		totalMinWidth += w
+	}
+
+	// Add spacing between columns (5 spaces)
+	spacing := 5
+	totalMinWidth += spacing * (len(cols) - 1)
+
+	// If available width is larger, distribute remainder to Model column
+	modelWidth := minWidths[1]
+	if availableWidth > totalMinWidth {
+		modelWidth = minWidths[1] + (availableWidth - totalMinWidth)
+	}
+
+	// Build cells with appropriate widths
+	widths := minWidths
+	widths[1] = modelWidth // Model column gets remainder
 
 	var parts []string
 	for i, col := range cols {
@@ -164,11 +267,7 @@ func formatTableRow(cols []string, opts ...lipgloss.Style) string {
 		parts = append(parts, cell)
 	}
 
-	row := strings.Join(parts, " ")
-	if len(opts) > 0 {
-		row = opts[0].Render(row)
-	}
-	return row
+	return strings.Join(parts, " ")
 }
 
 // renderHelp renders the bottom help bar.
@@ -176,5 +275,5 @@ func (m model) renderHelp() string {
 	if m.showHelp {
 		return m.help.View(m.keys)
 	}
-	return helpStyle.Render("  ↑↓/jk: navigate  /: search  v: VRAM  enter: select  q: quit  ?: help")
+	return helpStyle.Render("  ↑↓/jk: navigate  /: search  tab: expand detail  v: VRAM  enter: select  q: quit  ?: help")
 }
