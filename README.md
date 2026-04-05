@@ -111,11 +111,14 @@ Speed is estimated using a **two-path approach**:
 TPS = (GPU_bandwidth_GB/s / model_size_GB) × 0.85 efficiency
 ```
 
-The GPU bandwidth is looked up from a table of 30+ known GPUs (NVIDIA RTX/A-series/H-series, Apple M-series, AMD RX). For example:
+The GPU bandwidth is looked up from a table of 35+ known GPUs (NVIDIA RTX/A-series/H-series/GTX 16-series, Apple M-series, AMD RX). For example:
 - RTX 4090: 1008 GB/s
 - RTX 3090: 936 GB/s
 - Apple M2 Max: 400 GB/s (unified memory)
 - RX 7900 XTX: 960 GB/s
+- GTX 1650: 128 GB/s
+
+The lookup prefers longer/more specific matches (e.g., "GTX 1650 SUPER" before "GTX 1650") to avoid false positives.
 
 **Fallback path (parameter-count-based)** — when GPU bandwidth is unknown:
 
@@ -167,6 +170,8 @@ Context capability is scored based on the model's maximum context length:
 ## Benchmark Database
 
 KnowURLLM ships with an embedded benchmark database (`internal/registry/data/benchmarks.json`) containing curated MMLU and Chatbot Arena ELO scores for known models. Models without benchmark data receive a neutral quality score of 50. Scores are used in the quality component of the scoring formula.
+
+Benchmark enrichment uses regex-based fuzzy model name matching that handles version suffixes (`-v0.2`, `_v1`, etc.) and size-specific placeholders (a 3B model won't match an 8B entry).
 
 ### Updating Benchmarks
 
@@ -233,7 +238,7 @@ KnowURLLM/
 │   │   ├── gpu_nvidia_nvml.go        # NVIDIA NVML direct detection (Linux only)
 │   │   ├── gpu_amd.go                # AMD GPU detection (Linux)
 │   │   ├── gpu_apple.go              # Apple Silicon GPU detection
-│   │   ├── gpu_bandwidth.go          # Memory bandwidth lookup table (30+ GPUs)
+│   │   ├── gpu_bandwidth.go          # Memory bandwidth lookup table (35+ GPUs incl. GTX 16-series)
 │   │   ├── gpu_utils.go              # VRAM calculation, vendor normalization
 │   │   ├── error.go                  # GPUDetectionError + helpers
 │   │   └── hardware_test.go          # Unit + integration tests
@@ -279,7 +284,7 @@ CLI (cmd/knowurllm/main.go)
      └─ GPU (nvidia-smi/NVML, AMD ROCm, Apple Metal)
   → Model Fetching (registry/fetcher.go)
      ├─ Embedded hf_models.json (960+ models, go:embed)
-     └─ Ollama API (optional, live queries)
+     └─ Ollama API (optional, parallel concurrent queries across 9 model families)
   → Benchmark Enrichment (registry/benchmarks.go)
      └─ Embedded benchmarks.json with fuzzy name matching
   → Scoring (scorer/)
