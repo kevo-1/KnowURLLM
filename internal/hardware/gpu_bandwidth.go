@@ -1,6 +1,10 @@
 package hardware
 
-import "strings"
+import (
+	"sort"
+	"strings"
+	"sync"
+)
 
 // gpuBandwidth maps GPU model substrings to their memory bandwidth in GB/s.
 // Used for physics-based speed estimation.
@@ -18,6 +22,12 @@ var gpuBandwidth = map[string]float64{
 	"RTX 3080":  760,
 	"RTX 3070":  448,
 	"RTX 3060":  360,
+
+	// NVIDIA Turing (GTX 16-series)
+	"GTX 1660 SUPER": 336,
+	"GTX 1660":     192,
+	"GTX 1650 SUPER": 192,
+	"GTX 1650":     128,
 
 	// NVIDIA Data Center
 	"H100":      3350,
@@ -41,14 +51,34 @@ var gpuBandwidth = map[string]float64{
 	"RX 7800 XT":  624,
 }
 
+// sortedBandwidthKeys holds GPU model keys sorted by length descending,
+// so that longer (more specific) matches are checked first.
+var sortedBandwidthKeys []string
+var bandwidthKeysOnce sync.Once
+
 // LookupBandwidth returns the memory bandwidth in GB/s for a GPU model.
-// It performs a case-insensitive substring match against known GPUs.
+// It performs a case-insensitive substring match against known GPUs,
+// preferring longer (more specific) matches over shorter ones.
 // Returns (bandwidth_GB_s, found).
 func LookupBandwidth(gpuModel string) (float64, bool) {
 	upper := strings.ToUpper(gpuModel)
-	for key, bw := range gpuBandwidth {
+
+	// Initialize sorted keys once (thread-safe)
+	bandwidthKeysOnce.Do(func() {
+		keys := make([]string, 0, len(gpuBandwidth))
+		for k := range gpuBandwidth {
+			keys = append(keys, k)
+		}
+		// Sort by length descending so longer matches are checked first
+		sort.Slice(keys, func(i, j int) bool {
+			return len(keys[i]) > len(keys[j])
+		})
+		sortedBandwidthKeys = keys
+	})
+
+	for _, key := range sortedBandwidthKeys {
 		if strings.Contains(upper, strings.ToUpper(key)) {
-			return bw, true
+			return gpuBandwidth[key], true
 		}
 	}
 	return 0, false

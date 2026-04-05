@@ -186,9 +186,9 @@ func TestE2E_GPUBandwidthLookup(t *testing.T) {
 		{"M1 Pro", 200, true, "Apple specs"},
 		{"RX 7900 XTX", 960, true, "AMD specs"},
 
-		// GTX 1650 — NOT in table (this is a known gap!)
-		{"GTX 1650", 0, false, "NOT IN TABLE — known gap"},
-		{"GeForce GTX 1650", 0, false, "NOT IN TABLE — known gap"},
+		// GTX 1650 — now in table (was a known gap, now fixed)
+		{"GTX 1650", 128, true, "NVIDIA Turing specs"},
+		{"GeForce GTX 1650", 128, true, "NVIDIA Turing specs"},
 
 		// Unknown GPU
 		{"Unknown GPU XYZ", 0, false, "deliberately unknown"},
@@ -232,6 +232,9 @@ func TestE2E_GPUBandwidthCaseInsensitivity(t *testing.T) {
 		{"NVIDIA GEFORCE RTX 4090", 1008},
 		{"m2 max", 400},
 		{"M2 MAX", 400},
+		{"gtx 1650", 128},
+		{"GTX 1650", 128},
+		{"NVIDIA GeForce GTX 1650", 128},
 	}
 
 	for _, tt := range tests {
@@ -265,6 +268,11 @@ func TestE2E_GPUBandwidthAllEntries(t *testing.T) {
 		"RTX 3080": 760,
 		"RTX 3070": 448,
 		"RTX 3060": 360,
+		// NVIDIA Turing (GTX 16-series)
+		"GTX 1650":     128,
+		"GTX 1650 SUPER": 192,
+		"GTX 1660":     192,
+		"GTX 1660 SUPER": 336,
 		// NVIDIA Data Center
 		"H100": 3350,
 		"A100": 2000,

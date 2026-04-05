@@ -3,6 +3,7 @@ package registry
 import (
 	"embed"
 	"encoding/json"
+	"regexp"
 	"strings"
 )
 
@@ -99,13 +100,10 @@ func namesMatch(a, b string) bool {
 // *same* parameter size is referenced — a 3B model must never match an 8B entry.
 func normalizeForMatch(s string) string {
 	s = strings.ToLower(s)
-	// Remove version suffixes like v0.2, v0.3
-	for i := len(s) - 1; i >= 0; i-- {
-		if s[i] == '-' && i+2 < len(s) && s[i+1] == 'v' {
-			s = s[:i]
-			break
-		}
-	}
+	// Remove version suffixes like v0.2, v0.3, v1, etc. using regex
+	// Handles: "-v0.2", "_v1", "v0.3", etc.
+	versionPattern := regexp.MustCompile(`[-_]?v\d+(\.\d+)*$`)
+	s = versionPattern.ReplaceAllString(s, "")
 	// Replace size tokens longest-first with unique placeholders.
 	// Order matters: longer numeric prefixes must be replaced before shorter
 	// ones that would otherwise consume part of the string.

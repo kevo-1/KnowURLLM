@@ -53,11 +53,15 @@ func detectRunMode(modelSizeBytes uint64, vramBytes uint64, totalRAM uint64, isM
 
 	// MoE check: if MoE and active params fit in VRAM
 	if isMoE && activeParams > 0 {
-		activeSizeBytes := modelSizeBytes * activeParams / activeParams // active params as bytes estimate
-		// Use a simpler heuristic: active params ratio
-		// If active params fit in VRAM, it's MoE mode
-		if activeSizeBytes <= vramBytes && modelSizeBytes <= totalMem {
-			return RunModeMoE
+		// Estimate active expert size as proportion of total model size
+		// activeSizeBytes = modelSizeBytes * (activeParams / totalParams)
+		// We approximate total params from model size at Q4 baseline
+		totalParamsEstimate := uint64(float64(modelSizeBytes) / 0.563)
+		if totalParamsEstimate > 0 {
+			activeSizeBytes := modelSizeBytes * activeParams / totalParamsEstimate
+			if activeSizeBytes <= vramBytes && modelSizeBytes <= totalMem {
+				return RunModeMoE
+			}
 		}
 	}
 

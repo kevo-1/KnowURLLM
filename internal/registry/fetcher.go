@@ -159,86 +159,115 @@ func fetchOllamaLibrary(ctx context.Context) ([]models.ModelEntry, error) {
 		"deepseek", "mixtral", "llava", "codellama",
 	}
 
+	// Use channels to collect results from goroutines
+	type searchResult struct {
+		entries []models.ModelEntry
+	}
+	resultCh := make(chan searchResult, len(searchQueries))
+
+	// Fire all requests in parallel
+	for _, query := range searchQueries {
+		go func(q string) {
+			if ctx.Err() != nil {
+				resultCh <- searchResult{}
+				return
+			}
+
+			url := fmt.Sprintf("https://ollama.com/api/library/search?q=%s&limit=25", q)
+			req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+			if err != nil {
+				resultCh <- searchResult{}
+				return
+			}
+			req.Header.Set("Accept", "application/json")
+			req.Header.Set("User-Agent", "KnowURLLM/1.0")
+
+			resp, err := client.Do(req)
+			if err != nil {
+				resultCh <- searchResult{}
+				return
+			}
+
+			body, err := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			if err != nil {
+				resultCh <- searchResult{}
+				return
+			}
+
+			if resp.StatusCode != http.StatusOK {
+				resultCh <- searchResult{}
+				return
+			}
+
+			var libResp struct {
+				Models []struct {
+					Name         string `json:"name"`
+					DisplayName  string `json:"display_name"`
+					Description  string `json:"description"`
+					PullCount    int    `json:"pull_count"`
+					LikeCount    int    `json:"like_count"`
+					ShortDesc    string `json:"short_description"`
+					LastPushedAt string `json:"last_pushed_at"`
+				} `json:"models"`
+			}
+
+			if err := json.Unmarshal(body, &libResp); err != nil {
+				resultCh <- searchResult{}
+				return
+			}
+
+			var entries []models.ModelEntry
+			for _, m := range libResp.Models {
+				entry := models.ModelEntry{
+					ID:          m.Name,
+					DisplayName: m.DisplayName,
+					Source:      "ollama",
+					Downloads:   m.PullCount,
+					URL:         "https://ollama.com/library/" + m.Name,
+					Tags:        []string{"ollama"},
+				}
+
+				// Try to get more details from the tags endpoint
+				tagURL := fmt.Sprintf("https://ollama.com/v2/library/%s/tags", m.Name)
+				if tags := fetchOllamaTags(ctx, client, tagURL); tags != nil {
+					entry.ModelSizeBytes = tags.Size
+					entry.Quantization = tags.Quantization
+					entry.ContextLength = tags.ContextLength
+					if tags.Quantization != "" {
+						entry.Tags = append(entry.Tags, tags.Quantization)
+					}
+				}
+
+				// Enrich with benchmarks if available
+				if mmlu, elo, found := lookupBenchmarks(m.Name); found {
+					entry.MMLUScore = mmlu
+					entry.ArenaELO = elo
+				}
+
+				entries = append(entries, entry)
+			}
+
+			resultCh <- searchResult{entries: entries}
+		}(query)
+	}
+
+	// Collect and deduplicate results
 	seen := make(map[string]bool)
 	var allEntries []models.ModelEntry
 
-	for _, query := range searchQueries {
-		if ctx.Err() != nil {
-			break
-		}
-
-		url := fmt.Sprintf("https://ollama.com/api/library/search?q=%s&limit=25", query)
-		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-		if err != nil {
-			continue
-		}
-		req.Header.Set("Accept", "application/json")
-		req.Header.Set("User-Agent", "KnowURLLM/1.0")
-
-		resp, err := client.Do(req)
-		if err != nil {
-			continue
-		}
-
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			continue
-		}
-
-		if resp.StatusCode != http.StatusOK {
-			continue
-		}
-
-		var libResp struct {
-			Models []struct {
-				Name         string `json:"name"`
-				DisplayName  string `json:"display_name"`
-				Description  string `json:"description"`
-				PullCount    int    `json:"pull_count"`
-				LikeCount    int    `json:"like_count"`
-				ShortDesc    string `json:"short_description"`
-				LastPushedAt string `json:"last_pushed_at"`
-			} `json:"models"`
-		}
-
-		if err := json.Unmarshal(body, &libResp); err != nil {
-			continue
-		}
-
-		for _, m := range libResp.Models {
-			if seen[m.Name] {
-				continue
-			}
-			seen[m.Name] = true
-
-			entry := models.ModelEntry{
-				ID:          m.Name,
-				DisplayName: m.DisplayName,
-				Source:      "ollama",
-				Downloads:   m.PullCount,
-				URL:         "https://ollama.com/library/" + m.Name,
-				Tags:        []string{"ollama"},
-			}
-
-			// Try to get more details from the tags endpoint
-			tagURL := fmt.Sprintf("https://ollama.com/v2/library/%s/tags", m.Name)
-			if tags := fetchOllamaTags(ctx, client, tagURL); tags != nil {
-				entry.ModelSizeBytes = tags.Size
-				entry.Quantization = tags.Quantization
-				entry.ContextLength = tags.ContextLength
-				if tags.Quantization != "" {
-					entry.Tags = append(entry.Tags, tags.Quantization)
+	for i := 0; i < len(searchQueries); i++ {
+		select {
+		case result := <-resultCh:
+			for _, entry := range result.entries {
+				if seen[entry.ID] {
+					continue
 				}
+				seen[entry.ID] = true
+				allEntries = append(allEntries, entry)
 			}
-
-			// Enrich with benchmarks if available
-			if mmlu, elo, found := lookupBenchmarks(m.Name); found {
-				entry.MMLUScore = mmlu
-				entry.ArenaELO = elo
-			}
-
-			allEntries = append(allEntries, entry)
+		case <-ctx.Done():
+			break
 		}
 	}
 
