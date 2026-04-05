@@ -4,10 +4,10 @@
 
 ## Features
 
-- **Automatic hardware detection** — CPU cores, RAM, GPU VRAM (NVIDIA via NVML/AMD ROCm, Apple Silicon unified memory)
-- **Model registry aggregation** — fetches from both Hugging Face and Ollama APIs with fuzzy model name matching
-- **Intelligent scoring** — ranks models by hardware fit (50%), estimated throughput (30%), and benchmark quality (20%)
-- **Embedded benchmark database** — 200+ models with MMLU and Chatbot Arena ELO scores, auto-updated from live leaderboards
+- **Automatic hardware detection** — CPU cores, RAM, GPU VRAM (NVIDIA via nvidia-smi/NVML, AMD ROCm, Apple Silicon unified memory)
+- **Model registry aggregation** — 960+ models from an embedded Hugging Face database, with optional live Ollama API queries
+- **Intelligent scoring** — ranks models by hardware fit, estimated throughput, benchmark quality, and context capability
+- **Embedded benchmark database** — curated MMLU and Chatbot Arena ELO scores with fuzzy model name matching
 - **Interactive TUI** — searchable, filterable table with live detail panels showing score breakdowns
 - **Cross-platform** — Linux, macOS (Intel + Apple Silicon), Windows
 
@@ -43,8 +43,8 @@ knowurllm
 The tool will:
 
 1. **Detect your hardware** — CPU cores, RAM, GPU(s) and VRAM
-2. **Fetch available models** — from Hugging Face and Ollama registries
-3. **Score and rank** — using hardware fit, estimated throughput, and benchmark quality
+2. **Fetch available models** — from the embedded registry (960+ models)
+3. **Score and rank** — using hardware fit, estimated throughput, benchmark quality, and context
 4. **Launch the TUI** — browse, search, filter, and select models
 
 When you select a model and press **Enter**, it prints details and the `ollama run` command if applicable.
@@ -64,84 +64,109 @@ When you select a model and press **Enter**, it prints details and the `ollama r
 
 ## Scoring Formula
 
-Models are scored on a 0–100 scale using four weighted components inspired by [llmfit](https://github.com/AlexsJones/llmfit):
+Models are scored on a 0–100 composite scale using four weighted components inspired by [llmfit](https://github.com/AlexsJones/llmfit):
 
 | Component        | Weight (General) | Description                                           |
 | ---------------- | ---------------- | ----------------------------------------------------- |
-| **Fit**          | 40%              | How comfortably the model fits in VRAM + system RAM   |
-| **Speed**        | 30%              | Estimated throughput based on backend and model size  |
-| **Quality**      | 20%              | Benchmark scores (MMLU, Chatbot Arena ELO) + signals  |
-| **Context**      | 10%              | Context window capability for the use case            |
+| **Quality**      | 35%              | Benchmark scores (MMLU + Chatbot Arena ELO)           |
+| **Speed**        | 25%              | Estimated throughput (tokens/sec) based on hardware   |
+| **Fit**          | 25%              | How comfortably the model fits in VRAM + system RAM   |
+| **Context**      | 15%              | Context window capability for the use case            |
 
 Weights change based on the selected **use-case profile**:
 
 | Profile      | Quality | Speed | Fit   | Context | Best For                          |
 | ------------ | ------- | ----- | ----- | ------- | --------------------------------- |
-| **General**  | 20%     | 30%   | 40%   | 10%     | Balanced everyday use             |
-| **Coding**   | 25%     | 35%   | 25%   | 15%     | Code generation, needs speed      |
-| **Reasoning**| 35%     | 20%   | 30%   | 15%     | Complex reasoning, quality-first  |
-| **Chat**     | 15%     | 40%   | 35%   | 10%     | Conversational, responsiveness    |
-| **Multimodal**| 30%    | 25%   | 30%   | 15%     | Vision/audio, balanced            |
-| **Embedding**| 20%     | 35%   | 35%   | 10%     | Batch processing, throughput      |
+| **General**  | 35%     | 25%   | 25%   | 15%     | Balanced everyday use             |
+| **Coding**   | 45%     | 25%   | 20%   | 10%     | Code generation, quality-first    |
+| **Reasoning**| 55%     | 15%   | 20%   | 10%     | Complex reasoning, quality-critical |
+| **Chat**     | 25%     | 35%   | 25%   | 15%     | Conversational, responsiveness    |
+| **Multimodal**| 40%    | 20%   | 30%   | 10%     | Vision/audio, hardware-heavy      |
+| **Embedding**| 50%     | 30%   | 20%   | 0%      | Batch processing, quality-critical |
 
 ### Fit Score (Hardware Fit)
 
-| Category    | Score Range | Description                                        |
-| ----------- | ----------- | -------------------------------------------------- |
-| **Perfect** | 95–100      | Fits in VRAM with 50%+ headroom                    |
-| **Good**    | 80–95       | Fits in VRAM with 20-50% headroom, or needs RAM overflow with ratio ≥1.0 |
-| **Marginal**| 65–80       | Tight fit in VRAM (<20% headroom) or needs RAM overflow (ratio 0.85-1.0) |
-| **Too Tight**| 50–65      | Very tight fit, needs significant RAM overflow (ratio 0.7-0.85) |
-| **Excluded**| 0           | **Won't run** — model won't fit in available memory (ratio < 0.7) |
+The scorer first detects the **run mode** for each model:
+- **GPU** — model fits entirely in VRAM
+- **MoE** — Mixture-of-Experts: active experts in VRAM, inactive in RAM
+- **CPU+GPU** — model spills from VRAM into system RAM
+- **CPU** — no GPU available, system RAM only
+
+It then dynamically selects the highest-quality quantization (Q8_0 → Q6_K → Q5_K_M → Q4_K_M → Q3_K_M → Q2_K) that fits available memory.
+
+| Category    | Score | Description                                        |
+| ----------- | ----- | -------------------------------------------------- |
+| **Perfect** | 100   | Fits in VRAM with ≥10% headroom                    |
+| **Good**    | 75    | Fits in VRAM (tight), or MoE/CPU+GPU mode          |
+| **Marginal**| 40    | CPU-only inference                                 |
+| **Too Tight**| 0    | **Excluded** — model won't fit in available memory  |
 
 ### Speed Estimation
 
-Speed is estimated using backend-specific baselines (tokens/sec):
+Speed is estimated using a **two-path approach**:
 
-| Backend | Baseline (tok/s) |
-| ------- | ---------------- |
-| **CUDA** (NVIDIA) | 220 |
-| **ROCm** (AMD)    | 180 |
-| **Metal** (Apple) | 160 |
-| **SYCL** (Intel)  | 100 |
-| **CPU ARM**       | 90  |
-| **CPU x86**       | 70  |
+**Primary path (bandwidth-based)** — when a known GPU is detected:
 
-Formula: `(backend_baseline / model_size_gb) × efficiency_factor(0.55) × quant_factor`
+```
+TPS = (GPU_bandwidth_GB/s / model_size_GB) × 0.85 efficiency
+```
 
-Penalties:
-- CPU offload (partial): ×0.5
+The GPU bandwidth is looked up from a table of 30+ known GPUs (NVIDIA RTX/A-series/H-series, Apple M-series, AMD RX). For example:
+- RTX 4090: 1008 GB/s
+- RTX 3090: 936 GB/s
+- Apple M2 Max: 400 GB/s (unified memory)
+- RX 7900 XTX: 960 GB/s
+
+**Fallback path (parameter-count-based)** — when GPU bandwidth is unknown:
+
+```
+TPS = K_backend / params_billions × quant_multiplier × mode_penalty
+```
+
+| Backend | K Constant |
+| ------- | ---------- |
+| **CUDA** (NVIDIA) | 30.0 |
+| **Metal** (Apple) | 20.0 |
+| **ROCm** (AMD)    | 18.0 |
+| **CPU x86**       | 8.0  |
+| **CPU ARM**       | 10.0 |
+
+Mode penalties:
+- CPU+GPU offload: ×0.5
 - CPU-only (no GPU): ×0.3
 - MoE expert switching: ×0.8
 
+The final TPS score is normalized to 0–100: `score = min(100, log2(TPS + 1) × 12.5)`
+
 ### Quality Score
 
-Quality is calculated from:
-- **80% benchmark performance**: MMLU and Chatbot Arena ELO scores
-- **20% parameter count**: Larger models get a bonus (logarithmic scaling)
-- **Quantization adjustment**: Higher quantization (Q8, FP16) gets a small bonus, lower quantization (Q3, Q2) gets a penalty
+Quality is calculated from available benchmark data:
 
-| Available Data        | Base Formula                               |
+| Available Data        | Formula                                    |
 | --------------------- | ------------------------------------------ |
 | Both MMLU + Arena ELO | `0.6 × MMLU + 0.4 × normalized_ELO`        |
 | MMLU only             | `MMLU`                                     |
 | Arena ELO only        | `normalized_ELO` (scaled 800–1300 → 0–100) |
 | Neither               | `50` (neutral default)                     |
 
-Final: `0.8 × base_quality + 0.2 × param_bonus + quant_adjustment`
+Arena ELO is normalized from the 800–1300 range to 0–100. When both benchmarks are available, MMLU gets 60% weight and Arena ELO gets 40% weight.
 
 ### Context Score
 
-| Context Length | Score | Category  |
-| -------------- | ----- | --------- |
-| ≥ 128k tokens  | 100   | Perfect   |
-| 32k–128k       | 75–100| Good      |
-| 8k–32k         | 50–75 | Marginal  |
-| < 8k           | 0–50  | Too Tight |
+Context capability is scored based on the model's maximum context length:
+
+| Context Length | Score |
+| -------------- | ----- |
+| ≥ 128k tokens  | 100   |
+| ≥ 64k tokens   | 85    |
+| ≥ 32k tokens   | 70    |
+| ≥ 16k tokens   | 55    |
+| ≥ 8k tokens    | 40    |
+| < 8k tokens    | 20    |
 
 ## Benchmark Database
 
-KnowURLLM ships with an embedded benchmark database (`internal/registry/data/benchmarks.json`) containing MMLU and Chatbot Arena ELO scores for 200+ models. Scores are used in the quality component of the scoring formula.
+KnowURLLM ships with an embedded benchmark database (`internal/registry/data/benchmarks.json`) containing curated MMLU and Chatbot Arena ELO scores for known models. Models without benchmark data receive a neutral quality score of 50. Scores are used in the quality component of the scoring formula.
 
 ### Updating Benchmarks
 
@@ -182,64 +207,96 @@ Data sources:
 
 ## Platform Support
 
-| Platform            | CPU | RAM | GPU                       |
-| ------------------- | --- | --- | ------------------------- |
-| Linux               | Yes | Yes | NVIDIA (NVML), AMD (ROCm) |
-| macOS Intel         | Yes | Yes | Intel iGPU                |
-| macOS Apple Silicon | Yes | Yes | Unified Memory (Metal)    |
-| Windows             | Yes | Yes | NVIDIA (NVML)             |
+| Platform            | CPU | RAM | GPU                               |
+| ------------------- | --- | --- | --------------------------------- |
+| Linux               | Yes | Yes | NVIDIA (nvidia-smi/NVML), AMD (ROCm/sysfs) |
+| macOS Intel         | Yes | Yes | Intel iGPU                        |
+| macOS Apple Silicon | Yes | Yes | Unified Memory (Metal)            |
+| Windows             | Yes | Yes | NVIDIA (nvidia-smi)               |
 
 ## Project Structure
 
 ```
 KnowURLLM/
-├── cmd/knowurllm/main.go             # CLI entrypoint
+├── cmd/knowurllm/main.go             # CLI entrypoint (5-step pipeline)
 ├── internal/
-│   ├── models/                       # Shared data structures (ModelEntry, ModelScore, etc.)
-│   ├── hardware/                     # Hardware detection (CPU, RAM, GPU via NVML/gopsutil)
-│   ├── registry/                     # HuggingFace + Ollama fetcher, benchmark lookup
-│   │   ├── fetcher.go                # Registry aggregation logic
-│   │   ├── benchmarks.go             # Embedded benchmark database + fuzzy matching
-│   │   └── normalize.go              # Model name normalization
-│   ├── scorer/                       # Ranking and scoring logic
-│   │   ├── formula.go                # Hardware fit, throughput, quality formulas
-│   │   └── rank.go                   # Model ranking and sorting
+│   ├── models/                       # Shared data structures (contract layer)
+│   │   └── models.go                 # HardwareProfile, GPUInfo, ModelEntry, ModelScore, RankResult
+│   ├── hardware/                     # Hardware detection module
+│   │   ├── detect.go                 # Main Detect() orchestrator
+│   │   ├── cache.go                  # sync.Once caching + ResetCache()
+│   │   ├── detector.go               # HardwareDetector interface + MockDetector
+│   │   ├── cpu.go                    # CPU detection (gopsutil + platform fallbacks)
+│   │   ├── memory.go                 # RAM detection (gopsutil + platform fallbacks)
+│   │   ├── gpu.go                    # GPU coordinator (dispatches by platform)
+│   │   ├── gpu_nvidia.go             # NVIDIA detection via nvidia-smi
+│   │   ├── gpu_nvidia_nvml.go        # NVIDIA NVML direct detection (Linux only)
+│   │   ├── gpu_amd.go                # AMD GPU detection (Linux)
+│   │   ├── gpu_apple.go              # Apple Silicon GPU detection
+│   │   ├── gpu_bandwidth.go          # Memory bandwidth lookup table (30+ GPUs)
+│   │   ├── gpu_utils.go              # VRAM calculation, vendor normalization
+│   │   ├── error.go                  # GPUDetectionError + helpers
+│   │   └── hardware_test.go          # Unit + integration tests
+│   ├── registry/                     # Model registry + benchmark module
+│   │   ├── fetcher.go                # Embedded hf_models.json + Ollama API
+│   │   ├── benchmarks.go             # Embedded benchmarks.json + fuzzy matching
+│   │   ├── normalize.go              # Model name normalization, quantization parsing
+│   │   └── data/
+│   │       ├── hf_models.json        # 960+ embedded models
+│   │       └── benchmarks.json       # Curated MMLU + Arena ELO scores
+│   ├── scorer/                       # Scoring and ranking module
+│   │   ├── scorer.go                 # Scorer struct + validation
+│   │   ├── formula.go                # Run mode detection, quant selection, scoring
+│   │   ├── rank.go                   # Ranking, sorting, filtering
+│   │   ├── profiles.go               # ValidProfiles() helper
+│   │   └── scorer_test.go            # Comprehensive scorer tests
 │   └── tui/                          # Bubble Tea interactive UI
-│       ├── app.go                    # TUI application setup
-│       ├── table.go                  # Model table rendering
-│       ├── detail.go                 # Detail panel with score breakdown
-│       ├── search.go                 # Search/filter logic
-│       └── styles.go                 # Lipgloss theme definitions
+│       ├── app.go                    # App setup + Run()
+│       ├── model.go                  # Bubble Tea model state + key bindings
+│       ├── view.go                   # Render layouts (small/normal/wide)
+│       ├── table.go                  # Table rendering
+│       ├── detail.go                 # Detail panel (condensed + expanded)
+│       ├── search.go                 # Search input component
+│       ├── update.go                 # Event handling, filtering
+│       └── styles.go                 # Lipgloss theme
 ├── scripts/
 │   ├── build.sh                      # Cross-platform build script
-│   └── update_benchmarks.go          # Live benchmark updater (auto-discovers trending models)
-├── internal/registry/data/
-│   └── benchmarks.json               # Embedded benchmark database (MMLU + Arena ELO)
+│   └── update_benchmarks.go          # Live benchmark updater
 ├── testdata/                         # Mock API responses for testing
-└── ARCHITECTURE.md                   # Detailed architecture docs
+└── tests/e2e/                        # End-to-end tests
+    └── hardware_e2e_test.go          # Real hardware + pipeline tests
 ```
 
 ## Architecture
 
-KnowURLLM follows a layered architecture:
+KnowURLLM follows a layered architecture with `internal/models/` as the contract layer:
 
 ```
-CLI (main.go)
+CLI (cmd/knowurllm/main.go)
   → Hardware Detection (hardware/)
+     ├─ CPU (gopsutil → /proc/cpuinfo → sysctl → wmic)
+     ├─ Memory (gopsutil → platform fallbacks)
+     └─ GPU (nvidia-smi/NVML, AMD ROCm, Apple Metal)
   → Model Fetching (registry/fetcher.go)
-     ├─ HuggingFace API
-     └─ Ollama API
+     ├─ Embedded hf_models.json (960+ models, go:embed)
+     └─ Ollama API (optional, live queries)
   → Benchmark Enrichment (registry/benchmarks.go)
-     └─ Embedded benchmarks.json with fuzzy matching
+     └─ Embedded benchmarks.json with fuzzy name matching
   → Scoring (scorer/)
-     ├─ Hardware Fit (VRAM + RAM capacity)
-     ├─ Throughput (tokens/sec estimation)
-     └─ Quality (MMLU + Arena ELO)
+     ├─ Run mode detection (GPU / MoE / CPU+GPU / CPU)
+     ├─ Dynamic quantization selection (Q8_0 → Q2_K)
+     ├─ Speed estimation (bandwidth-based or param-count fallback)
+     ├─ Quality scoring (MMLU + Arena ELO)
+     ├─ Context scoring (6 tiers: 8k → 128k+)
+     └─ Use-case weighted composite (General/Coding/Reasoning/Chat/Multimodal/Embedding)
   → Ranking (scorer/rank.go)
+     └─ Multi-level tiebreaker sorting (FitCategory > Quality > Downloads > Name)
   → TUI Display (tui/)
-     ├─ Searchable table
-     ├─ Detail panel with score breakdown
-     └─ Source/VRAM filters
+     ├─ Responsive layouts (small <60w, normal 60-119w, wide ≥120w)
+     ├─ Searchable table with live filtering
+     ├─ Expandable detail panel with score breakdown
+     ├─ VRAM-only filter toggle
+     └─ Help panel with key bindings
 ```
 
 ## Testing
