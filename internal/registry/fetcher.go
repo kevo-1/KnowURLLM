@@ -7,7 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strings"
@@ -82,7 +82,7 @@ func (f *Fetcher) FetchAll(ctx context.Context) ([]domain.ModelEntry, error) {
 		entries = entries[:f.MaxModels]
 	}
 
-	log.Printf("Loaded %d models from embedded data file", len(entries))
+	slog.Info("loaded models from embedded data file", "component", "registry", "count", len(entries))
 	return entries, nil
 }
 
@@ -98,7 +98,7 @@ func (f *Fetcher) FetchOllama(ctx context.Context) ([]domain.ModelEntry, error) 
 	// We fetch the top models and convert them to our internal format.
 	entries, err := fetchOllamaLibrary(ctx)
 	if err != nil {
-		log.Printf("warning: Ollama fetch failed, returning empty: %v", err)
+		slog.Warn("ollama fetch failed, returning empty", "component", "registry", "error", err)
 		return []domain.ModelEntry{}, nil
 	}
 
@@ -112,7 +112,7 @@ func (f *Fetcher) FetchOllama(ctx context.Context) ([]domain.ModelEntry, error) 
 		entries = entries[:f.MaxModels]
 	}
 
-	log.Printf("Loaded %d models from Ollama library", len(entries))
+	slog.Info("loaded models from ollama library", "component", "registry", "count", len(entries))
 	return entries, nil
 }
 
@@ -147,7 +147,7 @@ type ollamaTag struct {
 
 // fetchOllamaLibrary queries the Ollama API for available domain.
 func fetchOllamaLibrary(ctx context.Context) ([]domain.ModelEntry, error) {
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := &http.Client{Timeout: 5 * time.Second}
 
 	// Ollama doesn't have a single "list all models" API that returns everything.
 	// The best public approach: use the search API with common model families.
@@ -165,87 +165,140 @@ func fetchOllamaLibrary(ctx context.Context) ([]domain.ModelEntry, error) {
 	}
 	resultCh := make(chan searchResult, len(searchQueries))
 
-	// Fire all requests in parallel
+	// Semaphore to limit concurrency to 3
+	sem := make(chan struct{}, 3)
+
+	// Fire all requests with concurrency limit
 	for _, query := range searchQueries {
 		go func(q string) {
+			// Acquire semaphore
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
 			if ctx.Err() != nil {
 				resultCh <- searchResult{}
 				return
 			}
 
-			url := fmt.Sprintf("https://ollama.com/api/library/search?q=%s&limit=25", q)
-			req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-			if err != nil {
-				resultCh <- searchResult{}
-				return
-			}
-			req.Header.Set("Accept", "application/json")
-			req.Header.Set("User-Agent", "KnowURLLM/1.0")
-
-			resp, err := client.Do(req)
-			if err != nil {
-				resultCh <- searchResult{}
-				return
-			}
-
-			body, err := io.ReadAll(resp.Body)
-			resp.Body.Close()
-			if err != nil {
-				resultCh <- searchResult{}
-				return
-			}
-
-			if resp.StatusCode != http.StatusOK {
-				resultCh <- searchResult{}
-				return
-			}
-
-			var libResp struct {
-				Models []struct {
-					Name         string `json:"name"`
-					DisplayName  string `json:"display_name"`
-					Description  string `json:"description"`
-					PullCount    int    `json:"pull_count"`
-					LikeCount    int    `json:"like_count"`
-					ShortDesc    string `json:"short_description"`
-					LastPushedAt string `json:"last_pushed_at"`
-				} `json:"models"`
-			}
-
-			if err := json.Unmarshal(body, &libResp); err != nil {
-				resultCh <- searchResult{}
-				return
-			}
-
+			// Retry logic with exponential backoff
+			const maxRetries = 3
 			var entries []domain.ModelEntry
-			for _, m := range libResp.Models {
-				entry := domain.ModelEntry{
-					ID:          m.Name,
-					DisplayName: m.DisplayName,
-					Source:      "ollama",
-					Downloads:   m.PullCount,
-					URL:         "https://ollama.com/library/" + m.Name,
-					Tags:        []string{"ollama"},
+			var lastErr error
+
+			for attempt := 0; attempt < maxRetries; attempt++ {
+				if ctx.Err() != nil {
+					resultCh <- searchResult{}
+					return
 				}
 
-				// Try to get more details from the tags endpoint
-				tagURL := fmt.Sprintf("https://ollama.com/v2/library/%s/tags", m.Name)
-				if tags := fetchOllamaTags(ctx, client, tagURL); tags != nil {
-					entry.ModelSizeBytes = tags.Size
-					entry.Quantization = tags.Quantization
-					entry.ContextLength = tags.ContextLength
-					if tags.Quantization != "" {
-						entry.Tags = append(entry.Tags, tags.Quantization)
+				url := fmt.Sprintf("https://ollama.com/api/library/search?q=%s&limit=25", q)
+				req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+				if err != nil {
+					lastErr = err
+					break
+				}
+				req.Header.Set("Accept", "application/json")
+				req.Header.Set("User-Agent", "KnowURLLM/1.0")
+
+				resp, err := client.Do(req)
+				if err != nil {
+					lastErr = err
+					// Retry on network errors
+					if attempt < maxRetries-1 {
+						backoff := time.Duration(1<<uint(attempt)) * time.Second
+						time.Sleep(backoff)
 					}
+					continue
 				}
 
-				// Enrich with benchmarks if available
-				if mmlu, elo, found := lookupBenchmarks(m.Name); found {
-					entry.MMLUScore = mmlu
-					entry.ArenaELO = elo
+				body, readErr := io.ReadAll(resp.Body)
+				resp.Body.Close()
+				if readErr != nil {
+					lastErr = readErr
+					if attempt < maxRetries-1 {
+						backoff := time.Duration(1<<uint(attempt)) * time.Second
+						time.Sleep(backoff)
+					}
+					continue
 				}
 
-				entries = append(entries, entry)
+				// Check for rate limiting (429) or service unavailable (503)
+				if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable {
+					lastErr = fmt.Errorf("HTTP %d", resp.StatusCode)
+					if attempt < maxRetries-1 {
+						backoff := time.Duration(1<<uint(attempt)) * time.Second
+						time.Sleep(backoff)
+					}
+					continue
+				}
+
+				if resp.StatusCode != http.StatusOK {
+					lastErr = fmt.Errorf("HTTP %d", resp.StatusCode)
+					break
+				}
+
+				var libResp struct {
+					Models []struct {
+						Name         string `json:"name"`
+						DisplayName  string `json:"display_name"`
+						Description  string `json:"description"`
+						PullCount    int    `json:"pull_count"`
+						LikeCount    int    `json:"like_count"`
+						ShortDesc    string `json:"short_description"`
+						LastPushedAt string `json:"last_pushed_at"`
+					} `json:"models"`
+				}
+
+				if err := json.Unmarshal(body, &libResp); err != nil {
+					lastErr = err
+					if attempt < maxRetries-1 {
+						backoff := time.Duration(1<<uint(attempt)) * time.Second
+						time.Sleep(backoff)
+					}
+					continue
+				}
+
+				// Success - process results
+				for _, m := range libResp.Models {
+					entry := domain.ModelEntry{
+						ID:          m.Name,
+						DisplayName: m.DisplayName,
+						Source:      "ollama",
+						Downloads:   m.PullCount,
+						URL:         "https://ollama.com/library/" + m.Name,
+						Tags:        []string{"ollama"},
+					}
+
+					// Try to get more details from the tags endpoint
+					tagURL := fmt.Sprintf("https://ollama.com/v2/library/%s/tags", m.Name)
+					if tags := fetchOllamaTags(ctx, client, tagURL); tags != nil {
+						entry.ModelSizeBytes = tags.Size
+						entry.Quantization = tags.Quantization
+						entry.ContextLength = tags.ContextLength
+						if tags.Quantization != "" {
+							entry.Tags = append(entry.Tags, tags.Quantization)
+						}
+					}
+
+					// Enrich with benchmarks if available
+					if mmlu, elo, ifeval, gsm8k, arc, found := lookupBenchmarks(m.Name); found {
+						entry.MMLUScore = mmlu
+						entry.ArenaELO = elo
+						entry.IFEvalScore = ifeval
+						entry.GSM8KScore = gsm8k
+						entry.ARCScore = arc
+					}
+
+					entries = append(entries, entry)
+				}
+
+				// Success - break retry loop
+				lastErr = nil
+				break
+			}
+
+			if lastErr != nil {
+				slog.Warn("ollama search query failed after retries", "component", "registry", "query", q, "retries", maxRetries, "error", lastErr)
 			}
 
 			resultCh <- searchResult{entries: entries}
@@ -374,10 +427,27 @@ func hfModelToEntry(raw hfModel) domain.ModelEntry {
 	}
 
 	// Try to enrich with known benchmark data
-	var mmluScore, arenaELO float64
-	if mmlu, elo, found := lookupBenchmarks(raw.Name); found {
+	var mmluScore, arenaELO, ifevalScore, gsm8kScore, arcScore float64
+	if mmlu, elo, ifeval, gsm8k, arc, found := lookupBenchmarks(raw.Name); found {
 		mmluScore = mmlu
 		arenaELO = elo
+		ifevalScore = ifeval
+		gsm8kScore = gsm8k
+		arcScore = arc
+	}
+
+	// Validate MoE fields
+	isMoE := raw.IsMoE
+	activeParams := raw.ActiveParams
+	if isMoE && activeParams == 0 {
+		// MoE flag set but no active params - disable MoE
+		isMoE = false
+		slog.Warn("model has IsMoE=true but ActiveParams=0, disabling MoE", "component", "registry", "model", raw.Name)
+	}
+	if activeParams > raw.ParamsRaw && activeParams > 0 {
+		// Active params exceed total params - clamp
+		slog.Warn("model has ActiveParams > ParameterCount, clamping", "component", "registry", "model", raw.Name, "activeParams", activeParams, "parameterCount", raw.ParamsRaw)
+		activeParams = raw.ParamsRaw
 	}
 
 	return domain.ModelEntry{
@@ -389,11 +459,14 @@ func hfModelToEntry(raw hfModel) domain.ModelEntry {
 		Source:         "huggingface",
 		MMLUScore:      mmluScore,
 		ArenaELO:       arenaELO,
+		IFEvalScore:    ifevalScore,
+		GSM8KScore:     gsm8kScore,
+		ARCScore:       arcScore,
 		Downloads:      raw.HFDownloads,
 		URL:            url,
 		Tags:           tags,
-		IsMoE:          raw.IsMoE,
-		ActiveParams:   raw.ActiveParams,
+		IsMoE:          isMoE,
+		ActiveParams:   activeParams,
 		ParameterCount: raw.ParamsRaw,
 	}
 }

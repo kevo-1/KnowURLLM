@@ -145,6 +145,39 @@ func TestParseParameterSize(t *testing.T) {
 	}
 }
 
+// TestParseFloat tests the float parser with scientific notation and edge cases.
+func TestParseFloat(t *testing.T) {
+	tests := []struct {
+		input     string
+		expected  float64
+		shouldErr bool
+	}{
+		{"3.8e9", 3.8e9, false},
+		{"1.5e9", 1.5e9, false},
+		{"70e9", 70e9, false},
+		{"3.14159", 3.14159, false},
+		{"0.5", 0.5, false},
+		{"-2.5", -2.5, false},
+		{"invalid", 0, true},
+		{"", 0, true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.input, func(t *testing.T) {
+			got, err := parseFloat(tc.input)
+			if tc.shouldErr && err == nil {
+				t.Errorf("parseFloat(%q) expected error, got nil", tc.input)
+			}
+			if !tc.shouldErr && err != nil {
+				t.Errorf("parseFloat(%q) unexpected error: %v", tc.input, err)
+			}
+			if !tc.shouldErr && got != tc.expected {
+				t.Errorf("parseFloat(%q) = %v, expected %v", tc.input, got, tc.expected)
+			}
+		})
+	}
+}
+
 // TestParseQuantizationFromFilename tests quantization extraction from filenames.
 func TestParseQuantizationFromFilename(t *testing.T) {
 	tests := []struct {

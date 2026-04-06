@@ -1,227 +1,233 @@
 {
-  "models": {
-    "deepseek-ai/deepseek-coder-33b-instruct": {
-      "arena_elo": 1180,
-      "mmlu": 70
-    },
-    "deepseek-ai/deepseek-coder-6.7b-instruct": {
-      "arena_elo": 1130,
-      "mmlu": 62
-    },
-    "deepseek-ai/deepseek-r1": {
-      "arena_elo": 1280,
-      "mmlu": 86
-    },
-    "deepseek-ai/deepseek-r1-distill-llama-70b": {
-      "arena_elo": 1235,
-      "mmlu": 77
-    },
-    "deepseek-ai/deepseek-r1-distill-llama-8b": {
-      "arena_elo": 1140,
-      "mmlu": 64
-    },
-    "deepseek-ai/deepseek-r1-distill-qwen-1.5b": {
-      "arena_elo": 1000,
-      "mmlu": 45
-    },
-    "deepseek-ai/deepseek-r1-distill-qwen-14b": {
-      "arena_elo": 1180,
-      "mmlu": 70
-    },
-    "deepseek-ai/deepseek-r1-distill-qwen-32b": {
-      "arena_elo": 1210,
-      "mmlu": 74
-    },
-    "deepseek-ai/deepseek-r1-distill-qwen-7b": {
-      "arena_elo": 1120,
-      "mmlu": 62
-    },
-    "deepseek-ai/deepseek-v2-lite": {
-      "arena_elo": 1170,
-      "mmlu": 68
-    },
-    "deepseek-ai/deepseek-v2.5": {
-      "arena_elo": 1240,
-      "mmlu": 78
-    },
-    "deepseek-ai/deepseek-v3": {
-      "arena_elo": 1275,
-      "mmlu": 85
-    },
-    "google/gemma-2-27b-it": {
-      "arena_elo": 1220,
-      "mmlu": 73
-    },
-    "google/gemma-2-2b-it": {
-      "arena_elo": 1080,
-      "mmlu": 55
-    },
-    "google/gemma-2-9b-it": {
-      "arena_elo": 1160,
-      "mmlu": 65
-    },
-    "google/gemma-7b-it": {
-      "arena_elo": 1110,
-      "mmlu": 58
-    },
-    "llava-hf/llava-1.5-7b-hf": {
-      "arena_elo": 1060,
-      "mmlu": 52
-    },
-    "llava-hf/llava-v1.6-mistral-7b-hf": {
-      "arena_elo": 1100,
-      "mmlu": 58
-    },
-    "meta-llama/llama-3-70b-instruct": {
-      "arena_elo": 1240,
-      "mmlu": 79.5
-    },
-    "meta-llama/llama-3-8b-instruct": {
-      "arena_elo": 1170,
-      "mmlu": 68.4
-    },
-    "meta-llama/llama-3.1-405b-instruct": {
-      "arena_elo": 1280,
-      "mmlu": 87
-    },
-    "meta-llama/llama-3.1-70b-instruct": {
-      "arena_elo": 1250,
-      "mmlu": 79.3
-    },
-    "meta-llama/llama-3.1-8b-instruct": {
-      "arena_elo": 1190,
-      "mmlu": 69.4
-    },
-    "meta-llama/llama-3.2-1b-instruct": {
-      "arena_elo": 1050,
-      "mmlu": 49
-    },
-    "meta-llama/llama-3.2-3b-instruct": {
-      "arena_elo": 1100,
-      "mmlu": 58
-    },
-    "meta-llama/llama-3.3-70b-instruct": {
-      "arena_elo": 1255,
-      "mmlu": 80
-    },
-    "microsoft/phi-3-medium-4k-instruct": {
-      "arena_elo": 1190,
-      "mmlu": 72
-    },
-    "microsoft/phi-3-mini-128k-instruct": {
-      "arena_elo": 1160,
-      "mmlu": 69
-    },
-    "microsoft/phi-3-mini-4k-instruct": {
-      "arena_elo": 1160,
-      "mmlu": 69
-    },
-    "microsoft/phi-3-small-8k-instruct": {
-      "arena_elo": 1120,
-      "mmlu": 65
-    },
-    "microsoft/phi-3.5-mini-instruct": {
-      "arena_elo": 1175,
-      "mmlu": 70
-    },
-    "microsoft/phi-3.5-moe-instruct": {
-      "arena_elo": 1180,
-      "mmlu": 71
-    },
-    "microsoft/phi-4-mini-instruct": {
-      "arena_elo": 1185,
-      "mmlu": 71
-    },
-    "mistralai/codestral-22b-v0.1": {
-      "arena_elo": 1120,
-      "mmlu": 62
-    },
-    "mistralai/mistral-7b-instruct": {
-      "arena_elo": 1140,
-      "mmlu": 60.1
-    },
-    "mistralai/mistral-7b-instruct-v0.2": {
-      "arena_elo": 1145,
-      "mmlu": 60.5
-    },
-    "mistralai/mistral-7b-instruct-v0.3": {
-      "arena_elo": 1150,
-      "mmlu": 61
-    },
-    "mistralai/mistral-large-instruct-2407": {
-      "arena_elo": 1260,
-      "mmlu": 81
-    },
-    "mistralai/mistral-nemo-instruct-2407": {
-      "arena_elo": 1170,
-      "mmlu": 68
-    },
-    "mistralai/mistral-small-24b-instruct": {
-      "arena_elo": 1200,
-      "mmlu": 72
-    },
-    "mistralai/mixtral-8x22b-instruct-v0.1": {
-      "arena_elo": 1240,
-      "mmlu": 76.5
-    },
-    "mistralai/mixtral-8x7b-instruct-v0.1": {
-      "arena_elo": 1210,
-      "mmlu": 70.6
-    },
-    "qwen/qwen2-72b-instruct": {
-      "arena_elo": 1235,
-      "mmlu": 78.5
-    },
-    "qwen/qwen2-7b-instruct": {
-      "arena_elo": 1180,
-      "mmlu": 71.5
-    },
-    "qwen/qwen2.5-0.5b-instruct": {
-      "arena_elo": 900,
-      "mmlu": 35
-    },
-    "qwen/qwen2.5-1.5b-instruct": {
-      "arena_elo": 950,
-      "mmlu": 42
-    },
-    "qwen/qwen2.5-14b-instruct": {
-      "arena_elo": 1230,
-      "mmlu": 77.2
-    },
-    "qwen/qwen2.5-32b-instruct": {
-      "arena_elo": 1245,
-      "mmlu": 79
-    },
-    "qwen/qwen2.5-3b-instruct": {
-      "arena_elo": 1050,
-      "mmlu": 55
-    },
-    "qwen/qwen2.5-72b-instruct": {
-      "arena_elo": 1255,
-      "mmlu": 81.5
-    },
-    "qwen/qwen2.5-7b-instruct": {
-      "arena_elo": 1200,
-      "mmlu": 74.5
-    },
-    "qwen/qwen2.5-coder-32b-instruct": {
-      "arena_elo": 1210,
-      "mmlu": 76
-    },
-    "qwen/qwen2.5-coder-7b-instruct": {
-      "arena_elo": 1140,
-      "mmlu": 68
-    },
-    "tinyllama/tinyllama-1.1b-chat-v1.0": {
-      "arena_elo": 920,
-      "mmlu": 38
-    }
-  },
-  "sources": [
-    "LMSYS Chatbot Arena leaderboard (https://lmarena.ai/leaderboard)",
-    "Official model cards",
-    "Open LLM Leaderboard (https://huggingface.co/spaces/open-llm-leaderboard/open_llm_leaderboard)",
-    "HuggingFace trending models (auto-discovered by download count)"
-  ],
-  "version": "2026-04-03"
+	"models": {
+		"deepseek-ai/deepseek-coder-33b-instruct": {
+			"arena_elo": 1180,
+			"mmlu": 70,
+			"ifeval": 75.5,
+			"gsm8k": 68.2,
+			"arc": 82.1
+		},
+		"deepseek-ai/deepseek-coder-6.7b-instruct": {
+			"arena_elo": 1130,
+			"mmlu": 62
+		},
+		"deepseek-ai/deepseek-r1": {
+			"arena_elo": 1280,
+			"mmlu": 86
+		},
+		"deepseek-ai/deepseek-r1-distill-llama-70b": {
+			"arena_elo": 1235,
+			"mmlu": 77
+		},
+		"deepseek-ai/deepseek-r1-distill-llama-8b": {
+			"arena_elo": 1140,
+			"mmlu": 64
+		},
+		"deepseek-ai/deepseek-r1-distill-qwen-1.5b": {
+			"arena_elo": 1000,
+			"mmlu": 45
+		},
+		"deepseek-ai/deepseek-r1-distill-qwen-14b": {
+			"arena_elo": 1180,
+			"mmlu": 70
+		},
+		"deepseek-ai/deepseek-r1-distill-qwen-32b": {
+			"arena_elo": 1210,
+			"mmlu": 74
+		},
+		"deepseek-ai/deepseek-r1-distill-qwen-7b": {
+			"arena_elo": 1120,
+			"mmlu": 62
+		},
+		"deepseek-ai/deepseek-v2-lite": {
+			"arena_elo": 1170,
+			"mmlu": 68
+		},
+		"deepseek-ai/deepseek-v2.5": {
+			"arena_elo": 1240,
+			"mmlu": 78
+		},
+		"deepseek-ai/deepseek-v3": {
+			"arena_elo": 1275,
+			"mmlu": 85
+		},
+		"google/gemma-2-27b-it": {
+			"arena_elo": 1220,
+			"mmlu": 73
+		},
+		"google/gemma-2-2b-it": {
+			"arena_elo": 1080,
+			"mmlu": 55
+		},
+		"google/gemma-2-9b-it": {
+			"arena_elo": 1160,
+			"mmlu": 65
+		},
+		"google/gemma-7b-it": {
+			"arena_elo": 1110,
+			"mmlu": 58
+		},
+		"llava-hf/llava-1.5-7b-hf": {
+			"arena_elo": 1060,
+			"mmlu": 52
+		},
+		"llava-hf/llava-v1.6-mistral-7b-hf": {
+			"arena_elo": 1100,
+			"mmlu": 58
+		},
+		"meta-llama/llama-3-70b-instruct": {
+			"arena_elo": 1240,
+			"mmlu": 79.5
+		},
+		"meta-llama/llama-3-8b-instruct": {
+			"arena_elo": 1170,
+			"mmlu": 68.4
+		},
+		"meta-llama/llama-3.1-405b-instruct": {
+			"arena_elo": 1280,
+			"mmlu": 87
+		},
+		"meta-llama/llama-3.1-70b-instruct": {
+			"arena_elo": 1250,
+			"mmlu": 79.3
+		},
+		"meta-llama/llama-3.1-8b-instruct": {
+			"arena_elo": 1190,
+			"mmlu": 69.4
+		},
+		"meta-llama/llama-3.2-1b-instruct": {
+			"arena_elo": 1050,
+			"mmlu": 49
+		},
+		"meta-llama/llama-3.2-3b-instruct": {
+			"arena_elo": 1100,
+			"mmlu": 58
+		},
+		"meta-llama/llama-3.3-70b-instruct": {
+			"arena_elo": 1255,
+			"mmlu": 80
+		},
+		"microsoft/phi-3-medium-4k-instruct": {
+			"arena_elo": 1190,
+			"mmlu": 72
+		},
+		"microsoft/phi-3-mini-128k-instruct": {
+			"arena_elo": 1160,
+			"mmlu": 69
+		},
+		"microsoft/phi-3-mini-4k-instruct": {
+			"arena_elo": 1160,
+			"mmlu": 69
+		},
+		"microsoft/phi-3-small-8k-instruct": {
+			"arena_elo": 1120,
+			"mmlu": 65
+		},
+		"microsoft/phi-3.5-mini-instruct": {
+			"arena_elo": 1175,
+			"mmlu": 70
+		},
+		"microsoft/phi-3.5-moe-instruct": {
+			"arena_elo": 1180,
+			"mmlu": 71
+		},
+		"microsoft/phi-4-mini-instruct": {
+			"arena_elo": 1185,
+			"mmlu": 71
+		},
+		"mistralai/codestral-22b-v0.1": {
+			"arena_elo": 1120,
+			"mmlu": 62
+		},
+		"mistralai/mistral-7b-instruct": {
+			"arena_elo": 1140,
+			"mmlu": 60.1
+		},
+		"mistralai/mistral-7b-instruct-v0.2": {
+			"arena_elo": 1145,
+			"mmlu": 60.5
+		},
+		"mistralai/mistral-7b-instruct-v0.3": {
+			"arena_elo": 1150,
+			"mmlu": 61
+		},
+		"mistralai/mistral-large-instruct-2407": {
+			"arena_elo": 1260,
+			"mmlu": 81
+		},
+		"mistralai/mistral-nemo-instruct-2407": {
+			"arena_elo": 1170,
+			"mmlu": 68
+		},
+		"mistralai/mistral-small-24b-instruct": {
+			"arena_elo": 1200,
+			"mmlu": 72
+		},
+		"mistralai/mixtral-8x22b-instruct-v0.1": {
+			"arena_elo": 1240,
+			"mmlu": 76.5
+		},
+		"mistralai/mixtral-8x7b-instruct-v0.1": {
+			"arena_elo": 1210,
+			"mmlu": 70.6
+		},
+		"qwen/qwen2-72b-instruct": {
+			"arena_elo": 1235,
+			"mmlu": 78.5
+		},
+		"qwen/qwen2-7b-instruct": {
+			"arena_elo": 1180,
+			"mmlu": 71.5
+		},
+		"qwen/qwen2.5-0.5b-instruct": {
+			"arena_elo": 900,
+			"mmlu": 35
+		},
+		"qwen/qwen2.5-1.5b-instruct": {
+			"arena_elo": 950,
+			"mmlu": 42
+		},
+		"qwen/qwen2.5-14b-instruct": {
+			"arena_elo": 1230,
+			"mmlu": 77.2
+		},
+		"qwen/qwen2.5-32b-instruct": {
+			"arena_elo": 1245,
+			"mmlu": 79
+		},
+		"qwen/qwen2.5-3b-instruct": {
+			"arena_elo": 1050,
+			"mmlu": 55
+		},
+		"qwen/qwen2.5-72b-instruct": {
+			"arena_elo": 1255,
+			"mmlu": 81.5
+		},
+		"qwen/qwen2.5-7b-instruct": {
+			"arena_elo": 1200,
+			"mmlu": 74.5,
+			"ifeval": 81.2,
+			"gsm8k": 82.5,
+			"arc": 88.3
+		},
+		"qwen/qwen2.5-coder-32b-instruct": {
+			"arena_elo": 1210,
+			"mmlu": 76
+		},
+		"qwen/qwen2.5-coder-7b-instruct": {
+			"arena_elo": 1140,
+			"mmlu": 68
+		},
+		"tinyllama/tinyllama-1.1b-chat-v1.0": {
+			"arena_elo": 920,
+			"mmlu": 38
+		}
+	},
+	"sources": [
+		"LMSYS Chatbot Arena leaderboard (https://lmarena.ai/leaderboard)",
+		"Official model cards",
+		"Open LLM Leaderboard (https://huggingface.co/spaces/open-llm-leaderboard/open_llm_leaderboard)",
+		"HuggingFace trending models (auto-discovered by download count)"
+	],
+	"version": "2026-04-03"
 }

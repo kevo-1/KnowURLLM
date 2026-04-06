@@ -3,8 +3,9 @@ package tui
 import (
 	"testing"
 
-	"github.com/kevo-1/KnowURLLM/internal/domain"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/exp/golden"
+	"github.com/kevo-1/KnowURLLM/internal/domain"
 )
 
 // makeTestResults creates a slice of RankedModel for testing.
@@ -334,4 +335,19 @@ func keyMsg(kt tea.KeyType, runes ...rune) tea.KeyMsg {
 
 func windowSizeMsg(w, h int) tea.WindowSizeMsg {
 	return tea.WindowSizeMsg{Width: w, Height: h}
+}
+
+// TestTUITableViewGolden verifies the main table view renders correctly.
+func TestTUITableViewGolden(t *testing.T) {
+	results := makeTestResults(5)
+	m := initialModel(results)
+
+	// Set window size to trigger proper layout
+	m = upd(t, m, windowSizeMsg(120, 40))
+
+	// Render the view
+	view := m.View()
+
+	// Compare against golden file
+	golden.RequireEqual(t, []byte(view))
 }

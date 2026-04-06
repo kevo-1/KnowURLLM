@@ -21,12 +21,18 @@ type benchmarksManifest struct {
 type benchmarkEntry struct {
 	MMLU     float64 `json:"mmlu"`
 	ArenaELO float64 `json:"arena_elo"`
+	IFEval   float64 `json:"ifeval"`
+	GSM8K    float64 `json:"gsm8k"`
+	ARC      float64 `json:"arc"`
 }
 
 // benchmarkData holds known benchmark scores for a model.
 type benchmarkData struct {
 	MMLU     float64
 	ArenaELO float64
+	IFEval   float64
+	GSM8K    float64
+	ARC      float64
 }
 
 // loadBenchmarks reads the embedded benchmarks.json and returns a lookup map.
@@ -47,6 +53,9 @@ func loadBenchmarks() map[string]benchmarkData {
 		result[strings.ToLower(id)] = benchmarkData{
 			MMLU:     entry.MMLU,
 			ArenaELO: entry.ArenaELO,
+			IFEval:   entry.IFEval,
+			GSM8K:    entry.GSM8K,
+			ARC:      entry.ARC,
 		}
 	}
 	return result
@@ -55,14 +64,14 @@ func loadBenchmarks() map[string]benchmarkData {
 // knownBenchmarks is populated at init from the embedded JSON.
 var knownBenchmarks = loadBenchmarks()
 
-// lookupBenchmarks finds MMLU and Arena ELO scores for a model by name.
-// Returns (mmlu, elo, found).
-func lookupBenchmarks(modelID string) (float64, float64, bool) {
+// lookupBenchmarks finds all 5 quality signals for a model by name.
+// Returns (mmlu, arenaELO, ifeval, gsm8k, arc, found).
+func lookupBenchmarks(modelID string) (float64, float64, float64, float64, float64, bool) {
 	normalized := strings.ToLower(strings.TrimSpace(modelID))
 
 	// Direct lookup
 	if data, ok := knownBenchmarks[normalized]; ok {
-		return data.MMLU, data.ArenaELO, true
+		return data.MMLU, data.ArenaELO, data.IFEval, data.GSM8K, data.ARC, true
 	}
 
 	// Strip common suffixes
@@ -72,18 +81,18 @@ func lookupBenchmarks(modelID string) (float64, float64, bool) {
 	}
 	if stripped != normalized {
 		if data, ok := knownBenchmarks[stripped]; ok {
-			return data.MMLU, data.ArenaELO, true
+			return data.MMLU, data.ArenaELO, data.IFEval, data.GSM8K, data.ARC, true
 		}
 	}
 
 	// Fuzzy match — try each known key
 	for key, data := range knownBenchmarks {
 		if namesMatch(normalized, key) {
-			return data.MMLU, data.ArenaELO, true
+			return data.MMLU, data.ArenaELO, data.IFEval, data.GSM8K, data.ARC, true
 		}
 	}
 
-	return 0, 0, false
+	return 0, 0, 0, 0, 0, false
 }
 
 // namesMatch checks if two model names are similar enough to be the same model.

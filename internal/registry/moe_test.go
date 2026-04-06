@@ -59,6 +59,64 @@ func TestMoEModelParsing(t *testing.T) {
 	}
 }
 
+// TestMoEValidation tests the MoE field validation during ingestion.
+func TestMoEValidation(t *testing.T) {
+	tests := []struct {
+		name           string
+		raw            hfModel
+		wantIsMoE      bool
+		wantActivePrams uint64
+	}{
+		{
+			name: "MoE with zero active params should be disabled",
+			raw: hfModel{
+				Name:         "test/moe-zero-active",
+				ParamsRaw:    10_000_000_000,
+				IsMoE:        true,
+				ActiveParams: 0,
+			},
+			wantIsMoE:      false,
+			wantActivePrams: 0,
+		},
+		{
+			name: "Active params exceeding total should be clamped",
+			raw: hfModel{
+				Name:         "test/moe-exceeds-total",
+				ParamsRaw:    10_000_000_000,
+				IsMoE:        true,
+				ActiveParams: 15_000_000_000, // Exceeds total
+			},
+			wantIsMoE:      true,
+			wantActivePrams: 10_000_000_000, // Should be clamped to total
+		},
+		{
+			name: "Valid MoE should be unchanged",
+			raw: hfModel{
+				Name:         "test/moe-valid",
+				ParamsRaw:    10_000_000_000,
+				IsMoE:        true,
+				ActiveParams: 2_000_000_000,
+			},
+			wantIsMoE:      true,
+			wantActivePrams: 2_000_000_000,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			entry := hfModelToEntry(tc.raw)
+
+			if entry.IsMoE != tc.wantIsMoE {
+				t.Errorf("IsMoE = %v, want %v", entry.IsMoE, tc.wantIsMoE)
+			}
+
+			if entry.ActiveParams != tc.wantActivePrams {
+				t.Errorf("ActiveParams = %d, want %d", entry.ActiveParams, tc.wantActivePrams)
+			}
+		})
+	}
+}
+
 // TestMoEModelVRAMFit tests that MoE models correctly calculate VRAM requirements.
 func TestMoEModelVRAMFit(t *testing.T) {
 	// This would require importing domain/hardware, so we'll skip for now

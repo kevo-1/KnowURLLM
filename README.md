@@ -9,10 +9,26 @@
 - **Quality tiers** — S/A/B/C/D tier classification with confidence intervals
 - **Category-specific scoring** — General Chat, Coding, Reasoning, Long Context, Multimodal
 - **Hardware compatibility filtering** — Only shows models that run on your hardware (GPU/MoE/CPU+GPU/CPU)
-- **Dynamic quantization** — Auto-selects best quant (Q8_0 → Q2_K) that fits your memory
-- **MoE support** — 146+ Mixture-of-Experts models with active parameter tracking
-- **Interactive TUI** — Searchable, filterable table with tier badges, quality scores, and expandable detail panels
+- **Dynamic quantization** — Auto-selects best quant (Q8_0 → Q2_K) that fits your memory; preserves explicit quantization when provided
+- **MoE support** — 146+ Mixture-of-Experts models with active parameter tracking and validation
+- **Correct MoE VRAM calculation** — Quantization-aware active parameter size estimation (fixes unit mismatch bug)
+- **Interactive TUI** — Searchable, filterable table with tier badges, quality scores, and expandable detail panels with snapshot tests
 - **Cross-platform** — Linux, macOS (Intel + Apple Silicon), Windows
+
+## Recent Improvements
+
+### v2.0 (April 2026)
+
+- **Fixed MoE VRAM calculation** — Eliminated hardcoded 0.563 constant; now uses quantization-aware `bytesPerParamForQuant()` for accurate active parameter size estimation
+- **Removed code duplication** — Unified GPU bandwidth lookup into single source of truth (`internal/domain/hardware/gpuinfo.go`)
+- **Eliminated dead code** — Removed duplicate `internal/models/` package and legacy `internal/scorer/` scoring system
+- **Extended benchmark support** — All 5 quality signals now flow through the pipeline (MMLU, ArenaELO, IFEval, GSM8K, ARC)
+- **Improved safety** — Replaced unsafe custom float parser with `strconv.ParseFloat` (supports scientific notation)
+- **MoE field validation** — Invalid MoE states detected and corrected during ingestion (zero active params, active > total)
+- **Enhanced reliability** — Ollama fetch now has concurrency control (max 3) and retry logic with exponential backoff for 429/503 errors
+- **Faster timeout** — Ollama HTTP timeout reduced from 30s to 5s for quicker failure detection
+- **Structured logging** — All logging migrated from `log.Printf` to `log/slog` with component field for filtering
+- **TUI snapshot tests** — Golden file tests added using `charmbracelet/x/exp/golden` for regression-free UI changes
 
 ## Installation
 
@@ -55,17 +71,17 @@ When you select a model and press **Enter**, it prints details and the `ollama r
 
 ### Key Bindings
 
-| Key            | Action                                           |
-| -------------- | ------------------------------------------------ |
-| `↑` / `k`      | Move up in the list                              |
-| `↓` / `j`      | Move down in the list                            |
-| `/`            | Open search                                      |
-| `esc`          | Clear search / exit search mode                  |
-| `v`            | Toggle VRAM-only filter                          |
-| `tab`          | Toggle expanded detail panel                     |
-| `enter`        | Select highlighted model                         |
-| `?`            | Toggle help panel                                |
-| `q` / `ctrl+c` | Quit                                             |
+| Key            | Action                          |
+| -------------- | ------------------------------- |
+| `↑` / `k`      | Move up in the list             |
+| `↓` / `j`      | Move down in the list           |
+| `/`            | Open search                     |
+| `esc`          | Clear search / exit search mode |
+| `v`            | Toggle VRAM-only filter         |
+| `tab`          | Toggle expanded detail panel    |
+| `enter`        | Select highlighted model        |
+| `?`            | Toggle help panel               |
+| `q` / `ctrl+c` | Quit                            |
 
 ## Ranking System
 
@@ -78,6 +94,7 @@ Tier 2: Hardware Compatibility Filter + Performance Sub-sort
 ```
 
 **Unlike composite scoring** (which mixes quality and hardware into one score), this approach:
+
 - ✅ Ranks models by **pure quality** first (what the model can do)
 - ✅ Filters out models that **don't run on your hardware**
 - ✅ Sub-sorts by **hardware fit** within each quality tier
@@ -86,15 +103,16 @@ Tier 2: Hardware Compatibility Filter + Performance Sub-sort
 
 Models are classified into quality tiers based on **Bayesian fusion** of multiple benchmark signals:
 
-| Tier | Percentile | Description | Example Use Cases |
-|------|-----------|-------------|-------------------|
-| **S** | Top 5% | State-of-the-art | Production systems, quality-critical tasks |
-| **A** | Top 15% | Excellent performance | Daily use, coding, reasoning |
-| **B** | Top 35% | Good capability | General tasks, balanced performance |
-| **C** | Top 60% | Moderate performance | Lightweight use, resource-constrained |
-| **D** | Bottom 40% | Basic capability | Simple tasks, experimentation |
+| Tier  | Percentile | Description           | Example Use Cases                          |
+| ----- | ---------- | --------------------- | ------------------------------------------ |
+| **S** | Top 5%     | State-of-the-art      | Production systems, quality-critical tasks |
+| **A** | Top 15%    | Excellent performance | Daily use, coding, reasoning               |
+| **B** | Top 35%    | Good capability       | General tasks, balanced performance        |
+| **C** | Top 60%    | Moderate performance  | Lightweight use, resource-constrained      |
+| **D** | Bottom 40% | Basic capability      | Simple tasks, experimentation              |
 
 **Confidence-aware classification:**
+
 - Models with few benchmarks get wider confidence intervals
 - Low-confidence models are conservatively downgraded (e.g., S-tier → A-tier)
 - Transparent: shows confidence % in detail panel
@@ -105,20 +123,22 @@ Instead of simple weighted averages, KnowURLLM uses **Bayesian fusion** to combi
 
 **Benchmark signals** (automatically detected from available data):
 
-| Benchmark | Weight | Confidence | Description |
-|-----------|--------|------------|-------------|
-| **Arena ELO** | 50% | 95% | LMSYS Chatbot Arena (human preference, gold standard) |
-| **MMLU-PRO** | 30% | 85% | Academic knowledge & reasoning benchmark |
-| **IFEval** | 10% | 60% | Instruction following capability |
-| **GSM8K** | 10% | 60% | Mathematical reasoning (grade school math) |
-| **ARC** | 10% | 60% | Science question & answers |
+| Benchmark     | Weight | Confidence | Description                                           |
+| ------------- | ------ | ---------- | ----------------------------------------------------- |
+| **Arena ELO** | 50%    | 95%        | LMSYS Chatbot Arena (human preference, gold standard) |
+| **MMLU-PRO**  | 30%    | 85%        | Academic knowledge & reasoning benchmark              |
+| **IFEval**    | 10%    | 60%        | Instruction following capability                      |
+| **GSM8K**     | 10%    | 60%        | Mathematical reasoning (grade school math)            |
+| **ARC**       | 10%    | 60%        | Science question & answers                            |
 
 **Bayesian fusion formula:**
+
 ```
 Quality Score = Σ(value × weight × confidence) / Σ(weight × confidence)
 ```
 
 **Missing data handling:**
+
 - Models without benchmarks get neutral prior (50) with zero confidence
 - More benchmarks → higher confidence → more reliable score
 - Confidence intervals: ±2 points (high confidence) to ±20 points (low confidence)
@@ -127,19 +147,20 @@ Quality Score = Σ(value × weight × confidence) / Σ(weight × confidence)
 
 Different use cases weight benchmarks differently:
 
-| Category | Arena ELO | MMLU-PRO | IFEval | GSM8K | ARC | Best For |
-|----------|-----------|----------|--------|-------|-----|----------|
-| **General Chat** | 70% | 20% | 10% | — | — | Conversational AI, daily assistance |
-| **Coding** | 40% | 30% | — | 30% | — | Code generation, debugging |
-| **Reasoning** | 30% | 20% | — | 40% | 10% | Math, logic, multi-step tasks |
-| **Long Context** | 50% | 50% | — | — | — | Document analysis, summarization |
-| **Multimodal** | 60% | 40% | — | — | — | Vision, cross-modal tasks |
+| Category         | Arena ELO | MMLU-PRO | IFEval | GSM8K | ARC | Best For                            |
+| ---------------- | --------- | -------- | ------ | ----- | --- | ----------------------------------- |
+| **General Chat** | 70%       | 20%      | 10%    | —     | —   | Conversational AI, daily assistance |
+| **Coding**       | 40%       | 30%      | —      | 30%   | —   | Code generation, debugging          |
+| **Reasoning**    | 30%       | 20%      | —      | 40%   | 10% | Math, logic, multi-step tasks       |
+| **Long Context** | 50%       | 50%      | —      | —     | —   | Document analysis, summarization    |
+| **Multimodal**   | 60%       | 40%      | —      | —     | —   | Vision, cross-modal tasks           |
 
 ### Hardware Compatibility (Filtering)
 
 After quality ranking, models are filtered by hardware compatibility:
 
 **Run mode detection:**
+
 - **GPU** — model fits entirely in VRAM (fastest)
 - **MoE** — Mixture-of-Experts: active experts in VRAM, inactive in RAM (146+ models)
 - **CPU+GPU** — model spills from VRAM into system RAM (moderate speed)
@@ -150,12 +171,12 @@ Walks from best quality → most compressed (Q8_0 → Q6_K → Q5_K_M → Q4_K_M
 
 **Fit classification:**
 
-| Category | Description | Typical Mode |
-|----------|-------------|--------------|
-| **Perfect** | Fits in VRAM with ≥10% headroom | GPU |
-| **Good** | Fits in VRAM (tight), or MoE/CPU+GPU mode | GPU, MoE, CPU+GPU |
-| **Marginal** | CPU-only inference | CPU |
-| **Too Tight** | **Excluded** — model won't fit in available memory | — |
+| Category      | Description                                        | Typical Mode      |
+| ------------- | -------------------------------------------------- | ----------------- |
+| **Perfect**   | Fits in VRAM with ≥10% headroom                    | GPU               |
+| **Good**      | Fits in VRAM (tight), or MoE/CPU+GPU mode          | GPU, MoE, CPU+GPU |
+| **Marginal**  | CPU-only inference                                 | CPU               |
+| **Too Tight** | **Excluded** — model won't fit in available memory | —                 |
 
 ### Speed Estimation
 
@@ -168,6 +189,7 @@ TPS = (GPU_bandwidth_GB/s / model_size_GB) × 0.85 efficiency
 ```
 
 The GPU bandwidth is looked up from a table of 35+ known GPUs (NVIDIA RTX/A-series/H-series/GTX 16-series, Apple M-series, AMD RX). For example:
+
 - RTX 4090: 1008 GB/s
 - RTX 3090: 936 GB/s
 - Apple M2 Max: 400 GB/s (unified memory)
@@ -182,15 +204,16 @@ The lookup prefers longer/more specific matches (e.g., "GTX 1650 SUPER" before "
 TPS = K_backend / params_billions × quant_multiplier × mode_penalty
 ```
 
-| Backend | K Constant |
-| ------- | ---------- |
-| **CUDA** (NVIDIA) | 30.0 |
-| **Metal** (Apple) | 20.0 |
-| **ROCm** (AMD)    | 18.0 |
-| **CPU x86**       | 8.0  |
-| **CPU ARM**       | 10.0 |
+| Backend           | K Constant |
+| ----------------- | ---------- |
+| **CUDA** (NVIDIA) | 30.0       |
+| **Metal** (Apple) | 20.0       |
+| **ROCm** (AMD)    | 18.0       |
+| **CPU x86**       | 8.0        |
+| **CPU ARM**       | 10.0       |
 
 Mode penalties:
+
 - CPU+GPU offload: ×0.5
 - CPU-only (no GPU): ×0.3
 - MoE expert switching: ×0.8
@@ -214,13 +237,13 @@ Context capability is scored based on the model's maximum context length:
 
 KnowURLLM ships with an embedded benchmark database (`internal/registry/data/benchmarks.json`) containing curated scores from multiple benchmarks:
 
-| Benchmark | Description | Scale |
-|-----------|-------------|-------|
-| **Chatbot Arena ELO** | LMSYS human preference voting | 800–1350 (normalized to 0–100) |
-| **MMLU-PRO** | Massive Multitask Language Understanding (professional) | 0–100 |
-| **IFEval** | Instruction Following evaluation | 0–100 |
-| **GSM8K** | Grade School Math (8K problems) | 0–100 |
-| **ARC** | AI2 Reasoning Challenge (science QA) | 0–100 |
+| Benchmark             | Description                                             | Scale                          |
+| --------------------- | ------------------------------------------------------- | ------------------------------ |
+| **Chatbot Arena ELO** | LMSYS human preference voting                           | 800–1350 (normalized to 0–100) |
+| **MMLU-PRO**          | Massive Multitask Language Understanding (professional) | 0–100                          |
+| **IFEval**            | Instruction Following evaluation                        | 0–100                          |
+| **GSM8K**             | Grade School Math (8K problems)                         | 0–100                          |
+| **ARC**               | AI2 Reasoning Challenge (science QA)                    | 0–100                          |
 
 Models without benchmark data receive a neutral quality score of 50 with zero confidence. Scores are fused using Bayesian methodology (see above).
 
@@ -265,14 +288,16 @@ Data sources:
 | `MAX_MODELS`    | Max models to fetch per registry              | `200`                    |
 | `FETCH_TIMEOUT` | Timeout per registry call                     | `30s`                    |
 
+**Note:** Ollama library fetch uses 5s HTTP timeout with retry logic (max 3 attempts) and exponential backoff for 429/503 errors.
+
 ## Platform Support
 
-| Platform            | CPU | RAM | GPU                               |
-| ------------------- | --- | --- | --------------------------------- |
+| Platform            | CPU | RAM | GPU                                        |
+| ------------------- | --- | --- | ------------------------------------------ |
 | Linux               | Yes | Yes | NVIDIA (nvidia-smi/NVML), AMD (ROCm/sysfs) |
-| macOS Intel         | Yes | Yes | Intel iGPU                        |
-| macOS Apple Silicon | Yes | Yes | Unified Memory (Metal)            |
-| Windows             | Yes | Yes | NVIDIA (nvidia-smi)               |
+| macOS Intel         | Yes | Yes | Intel iGPU                                 |
+| macOS Apple Silicon | Yes | Yes | Unified Memory (Metal)                     |
+| Windows             | Yes | Yes | NVIDIA (nvidia-smi)                        |
 
 ## Project Structure
 
@@ -403,6 +428,7 @@ go test ./...
 ```
 
 Tests cover:
+
 - **Hardware detection**: CPU, memory, GPU (NVIDIA, AMD, Apple Silicon)
 - **Quality scoring**: Bayesian fusion, ELO normalization, confidence intervals, category scoring (25+ tests)
 - **Hardware compatibility**: Run mode detection, quantization selection, MoE handling (15+ tests)
@@ -412,6 +438,7 @@ Tests cover:
 - **End-to-end**: Real hardware detection + full pipeline tests
 
 **Test coverage:**
+
 ```
 ✅ internal/domain/quality/     — 25 tests (Bayesian fusion, tiers, categories)
 ✅ internal/domain/hardware/    — 15 tests (compatibility, performance, MoE)

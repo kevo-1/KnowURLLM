@@ -4,6 +4,7 @@ package registry
 import (
 	"math"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -38,34 +39,9 @@ func parseParameterSize(s string) uint64 {
 	return uint64(num)
 }
 
-// parseFloat is a simple float64 parser.
+// parseFloat is a simple float64 parser using strconv.
 func parseFloat(s string) (float64, error) {
-	var result float64
-	var frac float64
-	var div float64 = 1
-	var isFrac bool
-
-	for _, c := range s {
-		if c == '.' {
-			isFrac = true
-			frac = 0
-			div = 1
-			continue
-		}
-		if c >= '0' && c <= '9' {
-			digit := float64(c - '0')
-			if isFrac {
-				div *= 10
-				frac += digit / div
-			} else {
-				result = result*10 + digit
-			}
-		} else {
-			return 0, nil
-		}
-	}
-
-	return result + frac, nil
+	return strconv.ParseFloat(s, 64)
 }
 
 // parseQuantizationFromFilename extracts quantization label from GGUF filenames.

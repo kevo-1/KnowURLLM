@@ -51,6 +51,7 @@ func EstimatePerformance(
 	} else {
 		// Fallback: parameter-count-based
 		k := kForBackend(hw)
+		// Normalize to Q4_K_M baseline for consistent param counting
 		paramsBillions := float64(modelSizeBytes) / 0.563 / 1e9
 		if paramsBillions <= 0 {
 			paramsBillions = 1

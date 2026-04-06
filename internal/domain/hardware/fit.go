@@ -33,27 +33,37 @@ func CheckCompatibility(hw domain.HardwareProfile, entry domain.ModelEntry) doma
 	vram := totalVRAM(hw)
 	totalMem := vram + hw.TotalRAM
 
-	// Step 1: Select best quantization that fits available memory
-	bestQuant := selectBestQuant(entry.ModelSizeBytes, totalMem)
+	// Step 1: Use existing quantization or select best
+	var bestQuant string
+	var modelSizeBytes uint64
 
-	// Half-context fallback if nothing fits
-	if bestQuant == "" {
-		bestQuant = selectBestQuant(entry.ModelSizeBytes, totalMem/2)
-	}
+	if entry.Quantization != "" {
+		// Model already has quantization - use it directly
+		bestQuant = entry.Quantization
+		modelSizeBytes = entry.ModelSizeBytes
+	} else {
+		// Select best quantization that fits available memory
+		bestQuant = selectBestQuant(entry.ModelSizeBytes, totalMem)
 
-	if bestQuant == "" {
-		return domain.ModelHardware{
-			Runnable:  false,
-			FitLabel:  "Too Tight",
-			FitReason: "Model too large for available memory at any quantization",
+		// Half-context fallback if nothing fits
+		if bestQuant == "" {
+			bestQuant = selectBestQuant(entry.ModelSizeBytes, totalMem/2)
 		}
-	}
 
-	// Step 2: Compute model size at selected quant
-	modelSizeBytes := sizeForQuant(entry.ModelSizeBytes, bestQuant)
+		if bestQuant == "" {
+			return domain.ModelHardware{
+				Runnable:  false,
+				FitLabel:  "Too Tight",
+				FitReason: "Model too large for available memory at any quantization",
+			}
+		}
+
+		// Compute model size at selected quant
+		modelSizeBytes = sizeForQuant(entry.ModelSizeBytes, bestQuant)
+	}
 
 	// Step 3: Detect run mode
-	mode := detectRunMode(modelSizeBytes, vram, hw.TotalRAM, entry.IsMoE, entry.ActiveParams)
+	mode := detectRunMode(modelSizeBytes, vram, hw.TotalRAM, entry.IsMoE, entry.ActiveParams, bestQuant)
 
 	// Step 4: Classify fit tier
 	tier, fitLabel := fitTierAndScore(mode, modelSizeBytes, vram, hw.TotalRAM)
@@ -79,9 +89,9 @@ func CheckCompatibility(hw domain.HardwareProfile, entry domain.ModelEntry) doma
 		}
 	case domain.RunModeMoE:
 		// MoE: active params in VRAM, rest in RAM
-		totalParamsEstimate := uint64(float64(modelSizeBytes) / 0.563)
-		if totalParamsEstimate > 0 && entry.ActiveParams > 0 {
-			activeSizeBytes := modelSizeBytes * entry.ActiveParams / totalParamsEstimate
+		bytesPerParam := bytesPerParamForQuant(bestQuant)
+		if entry.ActiveParams > 0 && bytesPerParam > 0 {
+			activeSizeBytes := uint64(float64(entry.ActiveParams) * bytesPerParam)
 			vramUsed = activeSizeBytes
 			ramUsed = modelSizeBytes - activeSizeBytes
 		}
@@ -123,14 +133,14 @@ func CheckCompatibility(hw domain.HardwareProfile, entry domain.ModelEntry) doma
 }
 
 // detectRunMode determines how the model will run based on available memory.
-func detectRunMode(modelSizeBytes uint64, vramBytes uint64, totalRAM uint64, isMoE bool, activeParams uint64) domain.RunMode {
+func detectRunMode(modelSizeBytes uint64, vramBytes uint64, totalRAM uint64, isMoE bool, activeParams uint64, quant string) domain.RunMode {
 	totalMem := vramBytes + totalRAM
 
 	// MoE check: if MoE and active params fit in VRAM
 	if isMoE && activeParams > 0 {
-		totalParamsEstimate := uint64(float64(modelSizeBytes) / 0.563)
-		if totalParamsEstimate > 0 {
-			activeSizeBytes := modelSizeBytes * activeParams / totalParamsEstimate
+		bytesPerParam := bytesPerParamForQuant(quant)
+		if bytesPerParam > 0 {
+			activeSizeBytes := uint64(float64(activeParams) * bytesPerParam)
 			if activeSizeBytes <= vramBytes && modelSizeBytes <= totalMem {
 				return domain.RunModeMoE
 			}
@@ -221,6 +231,19 @@ func fitTierLabel(tier fitTier, mode domain.RunMode, modelSizeBytes uint64, vram
 	default:
 		return "Unknown"
 	}
+}
+
+// bytesPerParamForQuant returns the bytes-per-parameter for a given quantization.
+// Returns 0.563 (Q4_K_M) as default for unknown quantizations.
+func bytesPerParamForQuant(quant string) float64 {
+	quantUpper := strings.ToUpper(quant)
+	for _, q := range quantLevels {
+		if strings.ToUpper(q.Name) == quantUpper {
+			return q.BytesPerParam
+		}
+	}
+	// Default to Q4_K_M
+	return 0.563
 }
 
 // selectBestQuant walks from best quality to most compressed and picks the

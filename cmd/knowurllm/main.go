@@ -6,7 +6,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"time"
 
@@ -20,7 +20,7 @@ func main() {
 	// 1. Detect hardware
 	hw, err := hardware.Detect()
 	if err != nil {
-		log.Printf("warning: hardware detection partial: %v", err)
+		slog.Warn("hardware detection partial", "component", "hardware", "error", err)
 		// continue — partial profile is acceptable
 	}
 
@@ -31,7 +31,8 @@ func main() {
 	fetcher := registry.NewFetcher()
 	entries, err := fetcher.FetchAll(ctx)
 	if err != nil {
-		log.Fatalf("failed to fetch models: %v", err)
+		slog.Error("failed to fetch models", "component", "registry", "error", err)
+		os.Exit(1)
 	}
 	if len(entries) == 0 {
 		fmt.Fprintln(os.Stderr, "no models found from any registry")
@@ -50,7 +51,8 @@ func main() {
 	app := tui.NewApp(results)
 	selected, err := app.Run()
 	if err != nil {
-		log.Fatalf("TUI error: %v", err)
+		slog.Error("TUI error", "component", "tui", "error", err)
+		os.Exit(1)
 	}
 
 	// 5. Output result

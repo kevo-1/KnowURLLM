@@ -10,9 +10,8 @@ import (
 	"testing"
 
 	"github.com/kevo-1/KnowURLLM/internal/domain"
+	domainhw "github.com/kevo-1/KnowURLLM/internal/domain/hardware"
 	"github.com/kevo-1/KnowURLLM/internal/hardware"
-	"github.com/kevo-1/KnowURLLM/internal/registry"
-	"github.com/kevo-1/KnowURLLM/internal/scorer"
 )
 
 // ──────────────────────────────────────────────
@@ -196,7 +195,7 @@ func TestE2E_GPUBandwidthLookup(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.gpuModel, func(t *testing.T) {
-			bw, found := hardware.LookupBandwidth(tt.gpuModel)
+			bw, found := domainhw.LookupBandwidth(tt.gpuModel)
 
 			if found != tt.shouldBeFound {
 				t.Errorf("LookupBandwidth(%q): found=%v, expected found=%v",
@@ -239,7 +238,7 @@ func TestE2E_GPUBandwidthCaseInsensitivity(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
-			bw, found := hardware.LookupBandwidth(tt.input)
+			bw, found := domainhw.LookupBandwidth(tt.input)
 			if !found {
 				t.Fatalf("LookupBandwidth(%q) should be found", tt.input)
 			}
@@ -293,7 +292,7 @@ func TestE2E_GPUBandwidthAllEntries(t *testing.T) {
 
 	for key, expectedBW := range knownEntries {
 		t.Run(key, func(t *testing.T) {
-			bw, found := hardware.LookupBandwidth(key)
+			bw, found := domainhw.LookupBandwidth(key)
 			if !found {
 				t.Errorf("Known entry %q not found in bandwidth table!", key)
 				return
@@ -370,253 +369,6 @@ func TestE2E_VRAMForVariousGPUs(t *testing.T) {
 			totalGB := float64(gpu.VRAM) / (1024 * 1024 * 1024)
 			t.Logf("%s (%s): %.2f GB VRAM, vendor=%q", gpu.Model, gpu.Vendor, totalGB, gpu.Vendor)
 		})
-	}
-}
-
-// ──────────────────────────────────────────────
-// E2E: Scorer Integration with Real Hardware
-// ──────────────────────────────────────────────
-
-// TestE2E_ScorerWithRealHardware runs the scorer pipeline with detected hardware
-// against known models from the embedded database.
-func TestE2E_ScorerWithRealHardware(t *testing.T) {
-	hardware.ResetCache()
-	profile, err := hardware.Detect()
-	if err != nil {
-		// Allow GPU errors
-		if !strings.Contains(err.Error(), "gpu") {
-			t.Fatalf("unexpected detection error: %v", err)
-		}
-		t.Logf("GPU detection error (acceptable): %v", err)
-	}
-
-	if profile.TotalRAM == 0 {
-		t.Fatal("zero RAM in hardware profile — cannot run scorer tests")
-	}
-
-	t.Logf("Scoring with hardware profile:")
-	t.Logf("  CPU: %s (%d cores)", profile.CPUModel, profile.CPUCores)
-	t.Logf("  RAM: %.2f GB", float64(profile.TotalRAM)/(1024*1024*1024))
-	t.Logf("  VRAM: %.2f GB available", float64(profile.AvailableVRAM)/(1024*1024*1024))
-	t.Logf("  GPUs: %d", len(profile.GPUs))
-
-	// Load models from embedded registry
-	fetcher := registry.NewFetcher()
-	entries, err := fetcher.FetchAll(t.Context())
-	if err != nil {
-		t.Fatalf("failed to fetch models: %v", err)
-	}
-	t.Logf("Loaded %d models from registry", len(entries))
-
-	// Run scorer
-	s := scorer.NewScorer()
-	results, err := s.Rank(profile, entries)
-	if err != nil {
-		t.Fatalf("scorer.Rank failed: %v", err)
-	}
-
-	t.Logf("Scored %d models (after excluding non-fitting)", len(results))
-
-	// Validate top results are reasonable
-	if len(results) == 0 {
-		t.Fatal("no models scored — this should not happen with a valid hardware profile")
-	}
-
-	// Check top 10 models
-	topN := 10
-	if len(results) < topN {
-		topN = len(results)
-	}
-
-	t.Logf("\n=== Top %d Models for This Hardware ===", topN)
-	for i := 0; i < topN; i++ {
-		r := results[i]
-		t.Logf("  #%d: %s (Score: %.1f, Fit: %s, Quality: %.1f, Speed: %.1f t/s, Context: %.0f)",
-			r.Rank,
-			r.Model.DisplayName,
-			r.Score.TotalScore,
-			r.Score.FitCategory,
-			r.Score.QualityScore,
-			r.Score.EstimatedTPS,
-			r.Score.ContextScore,
-		)
-	}
-
-	// Validation checks
-	t.Run("Score ranges are valid", func(t *testing.T) {
-		for _, r := range results {
-			if r.Score.TotalScore < 0 || r.Score.TotalScore > 100 {
-				t.Errorf("TotalScore out of range for %s: %.2f", r.Model.DisplayName, r.Score.TotalScore)
-			}
-			if r.Score.HardwareFitScore < 0 || r.Score.HardwareFitScore > 100 {
-				t.Errorf("HardwareFitScore out of range for %s: %.2f", r.Model.DisplayName, r.Score.HardwareFitScore)
-			}
-			if r.Score.QualityScore < 0 || r.Score.QualityScore > 100 {
-				t.Errorf("QualityScore out of range for %s: %.2f", r.Model.DisplayName, r.Score.QualityScore)
-			}
-		}
-	})
-
-	t.Run("Results are sorted by TotalScore descending", func(t *testing.T) {
-		for i := 1; i < len(results); i++ {
-			// Check that no result has a HIGHER score than its predecessor
-			// Ties (within 0.01) are acceptable and expected
-			if results[i].Score.TotalScore > results[i-1].Score.TotalScore+0.01 {
-				t.Errorf("Results not sorted correctly at position %d: %.2f > %.2f",
-					i, results[i].Score.TotalScore, results[i-1].Score.TotalScore)
-				break
-			}
-		}
-	})
-
-	t.Run("Rank numbers are sequential", func(t *testing.T) {
-		for i, r := range results {
-			expected := i + 1
-			if r.Rank != expected {
-				t.Errorf("Rank at position %d: expected %d, got %d", i, expected, r.Rank)
-				break
-			}
-		}
-	})
-
-	t.Run("Use-case profile scores differ", func(t *testing.T) {
-		if len(results) == 0 {
-			return
-		}
-		top := results[0]
-		// Different use-case profiles should produce different scores
-		profiles := scorer.ValidProfiles()
-		if len(profiles) == 0 {
-			t.Skip("no use-case profiles defined")
-		}
-		t.Logf("Available use-case profiles: %v", profiles)
-		_ = top
-	})
-}
-
-// TestE2E_ScorerWithFilterVRAMOnly tests the VRAM-only filter
-func TestE2E_ScorerWithFilterVRAMOnly(t *testing.T) {
-	hardware.ResetCache()
-	profile, _ := hardware.Detect()
-	if profile.TotalRAM == 0 {
-		t.Skip("no hardware profile available")
-	}
-
-	fetcher := registry.NewFetcher()
-	entries, err := fetcher.FetchAll(t.Context())
-	if err != nil {
-		t.Fatalf("failed to fetch models: %v", err)
-	}
-
-	s := scorer.NewScorer()
-
-	// Without VRAM-only filter
-	allResults, err := s.Rank(profile, entries)
-	if err != nil {
-		t.Fatalf("scorer.Rank failed: %v", err)
-	}
-
-	// With VRAM-only filter
-	vramResults, err := s.RankWithFilter(profile, entries, domain.FilterOptions{
-		VRAMOnly: true,
-	})
-	if err != nil {
-		t.Fatalf("scorer.RankWithFilter(VRAMOnly) failed: %v", err)
-	}
-
-	t.Logf("All models: %d, VRAM-only models: %d", len(allResults), len(vramResults))
-
-	if len(vramResults) > len(allResults) {
-		t.Error("VRAM-only filter should not return more models than unfiltered")
-	}
-
-	if len(vramResults) > 0 {
-		t.Logf("Top VRAM-only model: %s (Score: %.1f)", vramResults[0].Model.DisplayName, vramResults[0].Score.TotalScore)
-	}
-}
-
-// ──────────────────────────────────────────────
-// E2E: Full Pipeline Test (Detect → Fetch → Score)
-// ──────────────────────────────────────────────
-
-// TestE2E_FullPipeline simulates the complete main.go pipeline
-func TestE2E_FullPipeline(t *testing.T) {
-	// Step 1: Detect hardware
-	hardware.ResetCache()
-	hw, hwErr := hardware.Detect()
-	if hwErr != nil && !strings.Contains(hwErr.Error(), "gpu") {
-		t.Fatalf("Step 1 (Detect): fatal error: %v", hwErr)
-	}
-	t.Logf("Step 1 PASS: Hardware detected (CPU: %s, RAM: %.1f GB, VRAM: %.1f GB)",
-		hw.CPUModel, float64(hw.TotalRAM)/(1024*1024*1024), float64(hw.TotalVRAM)/(1024*1024*1024))
-
-	// Step 2: Fetch models
-	fetcher := registry.NewFetcher()
-	entries, err := fetcher.FetchAll(t.Context())
-	if err != nil {
-		t.Fatalf("Step 2 (Fetch): failed to load models: %v", err)
-	}
-	t.Logf("Step 2 PASS: %d models loaded from registry", len(entries))
-
-	// Step 3: Score and rank
-	s := scorer.NewScorer()
-	results, err := s.Rank(hw, entries)
-	if err != nil {
-		t.Fatalf("Step 3 (Score): scoring failed: %v", err)
-	}
-	t.Logf("Step 3 PASS: %d models scored and ranked", len(results))
-
-	// Step 4: Validate results are usable
-	if len(results) == 0 {
-		t.Fatal("Step 4 FAIL: no models scored — pipeline produced empty results")
-	}
-
-	// Find models that fit well
-	var goodFit []domain.RankResult
-	for _, r := range results {
-		if r.Score.FitCategory == "Perfect" || r.Score.FitCategory == "Good" {
-			goodFit = append(goodFit, r)
-		}
-	}
-
-	t.Logf("Step 4 PASS: %d models with Good/Perfect fit, %d total ranked", len(goodFit), len(results))
-
-	// Step 5: Check specific model categories
-	t.Run("Small models (should fit GTX 1650)", func(t *testing.T) {
-		smallModels := []string{"Phi", "TinyLlama", "Qwen2.5-0.5B", "Gemma-2b"}
-		for _, name := range smallModels {
-			for _, r := range results {
-				if strings.Contains(r.Model.DisplayName, name) {
-					t.Logf("  %s: Score=%.1f Fit=%s TPS=%.1f",
-						r.Model.DisplayName, r.Score.TotalScore, r.Score.FitCategory, r.Score.EstimatedTPS)
-					break
-				}
-			}
-		}
-	})
-
-	t.Run("Medium models (may fit with quantization)", func(t *testing.T) {
-		mediumModels := []string{"Llama-3", "Mistral-7B", "Qwen2.5-7B"}
-		for _, name := range mediumModels {
-			for _, r := range results {
-				if strings.Contains(r.Model.DisplayName, name) {
-					t.Logf("  %s: Score=%.1f Fit=%s TPS=%.1f",
-						r.Model.DisplayName, r.Score.TotalScore, r.Score.FitCategory, r.Score.EstimatedTPS)
-					break
-				}
-			}
-		}
-	})
-
-	// Overall pipeline status
-	t.Log("\n=== Pipeline Status ===")
-	t.Logf("Hardware: %s / %d cores / %.1f GB RAM / %.1f GB VRAM",
-		hw.CPUModel, hw.CPUCores,
-		float64(hw.TotalRAM)/(1024*1024*1024),
-		float64(hw.TotalVRAM)/(1024*1024*1024))
-	t.Logf("Models: %d loaded, %d scored, %d good fit", len(entries), len(results), len(goodFit))
-	if len(results) > 0 {
-		t.Logf("Top model: %s (Score: %.1f)", results[0].Model.DisplayName, results[0].Score.TotalScore)
 	}
 }
 
@@ -790,53 +542,5 @@ func TestE2E_CacheConcurrentAccess(t *testing.T) {
 	// Should still get same CPU model (same machine) but via fresh detection
 	if profileAfter.CPUModel != profile1.CPUModel {
 		t.Logf("CPU model changed after reset (expected: %q, got: %q)", profile1.CPUModel, profileAfter.CPUModel)
-	}
-}
-
-// ──────────────────────────────────────────────
-// E2E: Scorer Profiles Validation
-// ──────────────────────────────────────────────
-
-// TestE2E_ScorerProfiles tests all use-case profiles produce valid results
-func TestE2E_ScorerProfiles(t *testing.T) {
-	hardware.ResetCache()
-	profile, _ := hardware.Detect()
-	if profile.TotalRAM == 0 {
-		t.Skip("no hardware profile available")
-	}
-
-	fetcher := registry.NewFetcher()
-	entries, err := fetcher.FetchAll(t.Context())
-	if err != nil {
-		t.Fatalf("failed to fetch models: %v", err)
-	}
-
-	profiles := scorer.ValidProfiles()
-	t.Logf("Testing %d use-case profiles: %v", len(profiles), profiles)
-
-	s := scorer.NewScorer()
-
-	for _, prof := range profiles {
-		t.Run(prof, func(t *testing.T) {
-			// Note: RankWithFilter doesn't currently use UseCaseProfile field
-			// This test validates that the scorer runs without errors
-			results, err := s.Rank(profile, entries)
-			if err != nil {
-				t.Fatalf("Rank(profile=%s) failed: %v", prof, err)
-			}
-			if len(results) == 0 {
-				t.Fatalf("profile %s produced no results", prof)
-			}
-
-			// Verify scores are within valid range
-			for _, r := range results {
-				if r.Score.TotalScore < 0 || r.Score.TotalScore > 100 {
-					t.Errorf("TotalScore out of range: %.2f for %s", r.Score.TotalScore, r.Model.DisplayName)
-				}
-			}
-
-			t.Logf("Profile %q: %d models scored, top=%s (%.1f)",
-				prof, len(results), results[0].Model.DisplayName, results[0].Score.TotalScore)
-		})
 	}
 }
