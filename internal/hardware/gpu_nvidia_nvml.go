@@ -5,13 +5,13 @@ package hardware
 import (
 	"fmt"
 
-	"github.com/kevo-1/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/domain"
 	"github.com/NVIDIA/go-nvml/pkg/nvml"
 )
 
 // detectNVMLFallback is the real NVML implementation for Linux.
 // This overrides the stub in gpu_nvidia.go when building on Linux.
-func detectNVMLFallback() ([]models.GPUInfo, error) {
+func detectNVMLFallback() ([]domain.GPUInfo, error) {
 	ret := nvml.Init()
 	if ret != nvml.SUCCESS {
 		return nil, fmt.Errorf("nvml init failed: %v", ret)
@@ -23,7 +23,7 @@ func detectNVMLFallback() ([]models.GPUInfo, error) {
 		return nil, fmt.Errorf("nvml DeviceGetCount failed: %v", ret)
 	}
 
-	var gpus []models.GPUInfo
+	var gpus []domain.GPUInfo
 	for i := 0; i < count; i++ {
 		device, ret := nvml.DeviceGetHandleByIndex(i)
 		if ret != nvml.SUCCESS {
@@ -40,7 +40,7 @@ func detectNVMLFallback() ([]models.GPUInfo, error) {
 			continue
 		}
 
-		gpus = append(gpus, models.GPUInfo{
+		gpus = append(gpus, domain.GPUInfo{
 			Vendor: normalizeGPUVendor(name),
 			Model:  name,
 			VRAM:   memory.Total,

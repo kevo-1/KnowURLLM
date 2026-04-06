@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/kevo-1/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/domain"
 )
 
 // Rank scores all models against the hardware profile.
@@ -13,21 +13,21 @@ import (
 // Results are sorted by TotalScore descending.
 // Returns error only if entries is nil or hw is zero-value.
 func (s *Scorer) Rank(
-	hw models.HardwareProfile,
-	entries []models.ModelEntry,
-) ([]models.RankResult, error) {
+	hw domain.HardwareProfile,
+	entries []domain.ModelEntry,
+) ([]domain.RankResult, error) {
 	if err := validateInput(hw, entries); err != nil {
 		return nil, fmt.Errorf("scorer: invalid input: %w", err)
 	}
 
-	results := make([]models.RankResult, 0, len(entries))
+	results := make([]domain.RankResult, 0, len(entries))
 
 	for _, entry := range entries {
 		score, excluded := scoreModel(hw, entry)
 		if excluded {
 			continue
 		}
-		results = append(results, models.RankResult{
+		results = append(results, domain.RankResult{
 			Model: entry,
 			Score: score,
 		})
@@ -48,10 +48,10 @@ func (s *Scorer) Rank(
 
 // RankWithFilter applies filter options before ranking.
 func (s *Scorer) RankWithFilter(
-	hw models.HardwareProfile,
-	entries []models.ModelEntry,
-	filters models.FilterOptions,
-) ([]models.RankResult, error) {
+	hw domain.HardwareProfile,
+	entries []domain.ModelEntry,
+	filters domain.FilterOptions,
+) ([]domain.RankResult, error) {
 	if err := validateInput(hw, entries); err != nil {
 		return nil, fmt.Errorf("scorer: invalid input: %w", err)
 	}
@@ -59,7 +59,7 @@ func (s *Scorer) RankWithFilter(
 	vram := totalVRAM(hw)
 
 	// Pre-filter entries before scoring
-	filtered := make([]models.ModelEntry, 0, len(entries))
+	filtered := make([]domain.ModelEntry, 0, len(entries))
 	for _, entry := range entries {
 		// VRAMOnly: pre-check if model would fit in VRAM
 		if filters.VRAMOnly && entry.ModelSizeBytes > vram {
@@ -110,7 +110,7 @@ func (s *Scorer) RankWithFilter(
 
 	// Post-filter by MinQuality (requires scoring first)
 	if filters.MinQuality > 0 {
-		filteredResults := make([]models.RankResult, 0, len(results))
+		filteredResults := make([]domain.RankResult, 0, len(results))
 		for _, r := range results {
 			if r.Score.QualityScore >= filters.MinQuality {
 				filteredResults = append(filteredResults, r)
@@ -129,7 +129,7 @@ func (s *Scorer) RankWithFilter(
 
 // compareResults compares two RankResults for sorting.
 // Returns negative if a should come before b, positive if b should come before a, 0 if equal.
-func compareResults(a, b models.RankResult) int {
+func compareResults(a, b domain.RankResult) int {
 	// Primary: TotalScore descending (higher first)
 	diff := b.Score.TotalScore - a.Score.TotalScore
 	if diff > 0.01 {

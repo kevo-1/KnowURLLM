@@ -13,6 +13,13 @@ const (
 	colorWhite     = lipgloss.Color("#FFFFFF")
 	colorDarkGray  = lipgloss.Color("#1F1F1F")
 	colorLightGray = lipgloss.Color("#E5E7EB")
+	
+	// Tier colors
+	colorTierS = lipgloss.Color("#FFD700") // Gold
+	colorTierA = lipgloss.Color("#10B981") // Green
+	colorTierB = lipgloss.Color("#3B82F6") // Blue
+	colorTierC = lipgloss.Color("#F59E0B") // Yellow/Orange
+	colorTierD = lipgloss.Color("#6B7280") // Gray
 )
 
 var (
@@ -39,9 +46,20 @@ var (
 			Foreground(colorGold).
 			Bold(true)
 
+	// tierBadgeStyle styles quality tier (S/A/B/C/D) with tier-specific colors.
+	tierBadgeStyle = lipgloss.NewStyle().
+				Bold(true).
+				Padding(0, 1)
+
 	// vramBadgeStyle is the green VRAM badge.
 	vramBadgeStyle = lipgloss.NewStyle().
 			Foreground(colorGreen).
+			Bold(true).
+			Padding(0, 1)
+
+	// moeBadgeStyle is the blue MoE badge.
+	moeBadgeStyle = lipgloss.NewStyle().
+			Foreground(colorTierB).
 			Bold(true).
 			Padding(0, 1)
 
@@ -93,3 +111,21 @@ var (
 	valueStyle = lipgloss.NewStyle().
 			Foreground(colorWhite)
 )
+
+// GetTierColor returns the color for a given quality tier.
+func GetTierColor(tier string) lipgloss.Color {
+	switch tier {
+	case "S":
+		return colorTierS
+	case "A":
+		return colorTierA
+	case "B":
+		return colorTierB
+	case "C":
+		return colorTierC
+	case "D":
+		return colorTierD
+	default:
+		return colorMuted
+	}
+}

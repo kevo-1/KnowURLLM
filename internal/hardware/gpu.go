@@ -4,17 +4,17 @@ import (
 	"fmt"
 	"runtime"
 
-	"github.com/kevo-1/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/domain"
 )
 
 // gpu detects all GPUs on the system and returns them.
 // This is the coordinator that dispatches to platform-specific implementations.
-func gpu() ([]models.GPUInfo, error) {
+func gpu() ([]domain.GPUInfo, error) {
 	switch runtime.GOOS {
 	case "darwin":
 		gpus, err := detectAppleGPU()
 		if err != nil {
-			return []models.GPUInfo{}, NoGPUError(err)
+			return []domain.GPUInfo{}, NoGPUError(err)
 		}
 		return gpus, nil
 	case "linux":
@@ -40,10 +40,10 @@ func gpu() ([]models.GPUInfo, error) {
 		// NVIDIA only on Windows; AMD Windows detection is out of scope
 		gpus, err := detectNvidiaGPUs()
 		if err != nil {
-			return []models.GPUInfo{}, NoGPUError(err)
+			return []domain.GPUInfo{}, NoGPUError(err)
 		}
 		return gpus, nil
 	default:
-		return []models.GPUInfo{}, NoGPUError(fmt.Errorf("unsupported platform: %s", runtime.GOOS))
+		return []domain.GPUInfo{}, NoGPUError(fmt.Errorf("unsupported platform: %s", runtime.GOOS))
 	}
 }

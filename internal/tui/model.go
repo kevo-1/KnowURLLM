@@ -1,7 +1,7 @@
 package tui
 
 import (
-	"github.com/kevo-1/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/domain"
 	"github.com/charmbracelet/bubbles/help"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/table"
@@ -76,8 +76,8 @@ func (k keyMap) FullHelp() [][]key.Binding {
 // model is the Bubble Tea application state.
 type model struct {
 	// Data
-	allResults      []models.RankResult
-	filteredResults []models.RankResult
+	allResults      []domain.RankedModel
+	filteredResults []domain.RankedModel
 
 	// Components
 	table       table.Model
@@ -87,8 +87,8 @@ type model struct {
 
 	// State
 	searching      bool
-	filters        models.FilterOptions
-	selected       *models.ModelEntry
+	filters        domain.FilterOptions
+	selected       *domain.ModelEntry
 	ready          bool
 	windowWidth    int
 	windowHeight   int
@@ -104,7 +104,7 @@ type model struct {
 }
 
 // initialModel creates and initializes the model from the given results.
-func initialModel(results []models.RankResult) model {
+func initialModel(results []domain.RankedModel) model {
 	m := model{
 		allResults:      results,
 		filteredResults: results,
@@ -124,6 +124,10 @@ func initialModel(results []models.RankResult) model {
 		table.WithFocused(true),
 		table.WithHeight(h),
 	)
+
+	// Initialize the detail detail view viewport
+	m.detailView = viewport.New(0, 5) // Will be resized on first WindowSizeMsg
+	m.detailView.SetContent("Use ↑↓ to navigate models")
 
 	return m
 }

@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kevo-1/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/domain"
 )
 
 // renderDetailPanel renders the detail panel for the currently focused model.
 // The expanded parameter controls whether all fields or only key fields are shown.
-func renderDetailPanel(result models.RankResult, width int, expanded bool) string {
+func renderDetailPanel(result domain.RankedModel, width int, expanded bool) string {
 	if width < 40 {
 		return ""
 	}
@@ -21,28 +21,32 @@ func renderDetailPanel(result models.RankResult, width int, expanded bool) strin
 }
 
 // renderDetailPanelCondensed renders a compact view with only key information.
-func renderDetailPanelCondensed(result models.RankResult, width int) string {
+func renderDetailPanelCondensed(result domain.RankedModel, width int) string {
 	m := result.Model
-	s := result.Score
+	q := result.Quality
+	hw := result.Hardware
 
 	var lines []string
 
-	// Fit badge and reason
-	fitBadge := renderFitBadge(s.FitCategory)
-	lines = append(lines, formatDetailLine("Fit:", fitBadge+" "+s.FitReason))
+	// Tier badge and fit badge
+	tierBadge := tierBadgeStyle.Copy().Foreground(GetTierColor(string(q.Tier))).Render(string(q.Tier))
+	fitBadge := renderFitBadge(hw.FitLabel)
+	lines = append(lines, formatDetailLine("Tier:", tierBadge+"  |  Fit: "+fitBadge))
 
-	// Total score with breakdown
-	scoreLine := fmt.Sprintf("Total %.1f  |  Fit %.1f  |  Speed %.1f  |  Quality %.1f",
-		s.TotalScore, s.HardwareFitScore, s.ThroughputScore, s.QualityScore)
-	lines = append(lines, formatDetailLine("Score:", scoreLine))
+	// Quality score with confidence
+	qualityLine := fmt.Sprintf("%.0f/100", q.Overall)
+	if q.Confidence < 0.5 {
+		qualityLine += fmt.Sprintf(" (±%.0f, low confidence)", (100-q.Overall)*0.2)
+	}
+	lines = append(lines, formatDetailLine("Quality:", qualityLine))
 
 	// Performance estimate
-	lines = append(lines, formatDetailLine("Perf:", formatTPS(s.EstimatedTPS)))
+	lines = append(lines, formatDetailLine("Perf:", formatTPS(hw.EstimatedTPS)))
 
 	// Model size and quantization
 	sizeLine := formatBytes(m.ModelSizeBytes)
-	if m.Quantization != "" {
-		sizeLine += "  |  Quant: " + m.Quantization
+	if hw.BestQuant != "" {
+		sizeLine += "  |  Best: " + hw.BestQuant
 	}
 	lines = append(lines, formatDetailLine("Size:", sizeLine))
 
@@ -51,65 +55,74 @@ func renderDetailPanelCondensed(result models.RankResult, width int) string {
 }
 
 // renderDetailPanelExpanded renders the full detail view with all fields.
-func renderDetailPanelExpanded(result models.RankResult, width int) string {
+func renderDetailPanelExpanded(result domain.RankedModel, width int) string {
 	m := result.Model
-	s := result.Score
+	q := result.Quality
+	hw := result.Hardware
 
 	var lines []string
 
-	// Fit reason with category badge
-	fitBadge := renderFitBadge(s.FitCategory)
-	lines = append(lines, formatDetailLine("Fit:", fitBadge+" "+s.FitReason))
+	// Tier badge and fit badge
+	tierBadge := tierBadgeStyle.Copy().Foreground(GetTierColor(string(q.Tier))).Render(string(q.Tier))
+	fitBadge := renderFitBadge(hw.FitLabel)
+	lines = append(lines, formatDetailLine("Tier:", tierBadge+"  |  Fit: "+fitBadge))
+	lines = append(lines, "")
 
-	// Score breakdown — now with 5 dimensions
-	scoreLine := fmt.Sprintf("Total %.1f  |  Fit %.1f  |  Speed %.1f  |  Quality %.1f  |  Context %.1f",
-		s.TotalScore, s.HardwareFitScore, s.ThroughputScore, s.QualityScore, s.ContextScore)
-	lines = append(lines, formatDetailLine("Score:", scoreLine))
+	// Quality breakdown
+	var qualityParts []string
+	if q.ArenaELO > 0 {
+		qualityParts = append(qualityParts, fmt.Sprintf("Arena ELO: %.0f", q.ArenaELO))
+	}
+	if q.MMLUPro > 0 {
+		qualityParts = append(qualityParts, fmt.Sprintf("MMLU-PRO: %.1f", q.MMLUPro))
+	}
+	if q.IFEval > 0 {
+		qualityParts = append(qualityParts, fmt.Sprintf("IFEval: %.1f", q.IFEval))
+	}
+	if q.GSM8K > 0 {
+		qualityParts = append(qualityParts, fmt.Sprintf("GSM8K: %.1f", q.GSM8K))
+	}
+	
+	qualityScore := fmt.Sprintf("Overall: %.0f/100 (Confidence: %.0f%%)", q.Overall, q.Confidence*100)
+	if len(qualityParts) > 0 {
+		qualityScore += "  |  " + strings.Join(qualityParts, ", ")
+	}
+	lines = append(lines, formatDetailLine("Quality:", qualityScore))
+	lines = append(lines, "")
+
+	// Category scores
+	if len(q.CategoryScores) > 0 {
+		var catParts []string
+		for cat, score := range q.CategoryScores {
+			catParts = append(catParts, fmt.Sprintf("%s: %.0f", formatCategoryName(cat), score))
+		}
+		lines = append(lines, formatDetailLine("Categories:", strings.Join(catParts, "  |  ")))
+		lines = append(lines, "")
+	}
 
 	// Performance estimate
-	lines = append(lines, formatDetailLine("Perf:", formatTPS(s.EstimatedTPS)))
+	lines = append(lines, formatDetailLine("TPS:", formatTPS(hw.EstimatedTPS)))
+	lines = append(lines, formatDetailLine("Run Mode:", formatRunMode(hw.Mode)))
+	lines = append(lines, formatDetailLine("Quant:", hw.BestQuant))
+	lines = append(lines, "")
 
-	// Quality metrics — always show QualityScore, show raw benchmarks if available
-	var qualityParts []string
-	if m.MMLUScore > 0 {
-		qualityParts = append(qualityParts, fmt.Sprintf("MMLU %.1f", m.MMLUScore))
+	// Memory utilization
+	var memParts []string
+	if hw.VRAMUtilPct > 0 {
+		memParts = append(memParts, fmt.Sprintf("VRAM: %.0f%%", hw.VRAMUtilPct*100))
 	}
-	if m.ArenaELO > 0 {
-		qualityParts = append(qualityParts, fmt.Sprintf("ELO %.0f", m.ArenaELO))
+	if hw.RAMUtilPct > 0 {
+		memParts = append(memParts, fmt.Sprintf("RAM: %.0f%%", hw.RAMUtilPct*100))
 	}
-
-	if len(qualityParts) > 0 {
-		// Show raw benchmark scores + QualityScore
-		lines = append(lines, formatDetailLine("Quality:",
-			strings.Join(qualityParts, "  |  ")+fmt.Sprintf("  |  Score %.1f", s.QualityScore)))
-	} else {
-		// No raw benchmarks available — show computed QualityScore only
-		lines = append(lines, formatDetailLine("Quality:",
-			fmt.Sprintf("Score %.1f (estimated)", s.QualityScore)))
+	if len(memParts) > 0 {
+		lines = append(lines, formatDetailLine("Memory:", strings.Join(memParts, "  |  ")))
 	}
 
-	// Size, quantization, context
-	var sizeParts []string
-	sizeParts = append(sizeParts, formatBytes(m.ModelSizeBytes))
-	if m.Quantization != "" {
-		sizeParts = append(sizeParts, "Quant: "+m.Quantization)
-	}
+	// Model info
+	lines = append(lines, "")
+	lines = append(lines, formatDetailLine("Source:", m.Source))
 	if m.ContextLength > 0 {
-		sizeParts = append(sizeParts, "Context: "+formatContext(m.ContextLength))
-	}
-	lines = append(lines, formatDetailLine("Size:", strings.Join(sizeParts, "  |  ")))
-
-	// Source and tags
-	var tagParts []string
-	tagParts = append(tagParts, "Source: "+m.Source)
-	if len(m.Tags) > 0 {
-		tagParts = append(tagParts, "Tags: "+strings.Join(m.Tags, ", "))
-	}
-	lines = append(lines, formatDetailLine("", strings.Join(tagParts, "  |  ")))
-
-	// URL
-	if m.URL != "" {
-		lines = append(lines, formatDetailLine("URL:", m.URL))
+		lines = append(lines, formatDetailLine("Context:", formatContext(m.ContextLength)))
 	}
 
 	content := strings.Join(lines, "\n")
@@ -165,14 +178,48 @@ func formatTPS(f float64) string {
 func renderFitBadge(category string) string {
 	switch category {
 	case "Perfect":
-		return "[Perfect]"
+		return vramBadgeStyle.Render("VRAM ✓")
 	case "Good":
-		return "[Good]"
+		return moeBadgeStyle.Render("Good")
 	case "Marginal":
-		return "[Marginal]"
+		return ramBadgeStyle.Render("RAM")
 	case "Too Tight":
-		return "[Too Tight]"
+		return mutedTextStyle.Render("Too Tight")
 	default:
-		return "[" + category + "]"
+		return mutedTextStyle.Render(category)
+	}
+}
+
+// formatCategoryName formats a category score name for display.
+func formatCategoryName(cat string) string {
+	switch cat {
+	case "general_chat":
+		return "Chat"
+	case "coding":
+		return "Code"
+	case "reasoning":
+		return "Reason"
+	case "long_context":
+		return "Context"
+	case "multimodal":
+		return "Multi"
+	default:
+		return cat
+	}
+}
+
+// formatRunMode formats a run mode for display.
+func formatRunMode(mode domain.RunMode) string {
+	switch mode {
+	case domain.RunModeGPU:
+		return "GPU"
+	case domain.RunModeMoE:
+		return "MoE"
+	case domain.RunModeCPUGPU:
+		return "CPU+GPU"
+	case domain.RunModeCPU:
+		return "CPU"
+	default:
+		return "Unknown"
 	}
 }

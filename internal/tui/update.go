@@ -3,7 +3,7 @@ package tui
 import (
 	"strings"
 
-	"github.com/kevo-1/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/domain"
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -288,12 +288,12 @@ func (m *model) updateDetailViewSize() {
 }
 
 // filterResults applies the filter options to the given results.
-func filterResults(all []models.RankResult, opts models.FilterOptions) []models.RankResult {
+func filterResults(all []domain.RankedModel, opts domain.FilterOptions) []domain.RankedModel {
 	if opts.SearchQuery == "" && !opts.VRAMOnly && opts.Quantization == "" && opts.MinQuality == 0 {
 		return all
 	}
 
-	var filtered []models.RankResult
+	var filtered []domain.RankedModel
 	for _, r := range all {
 		// Search query filter (case-insensitive substring on DisplayName and Tags)
 		if opts.SearchQuery != "" {
@@ -312,18 +312,17 @@ func filterResults(all []models.RankResult, opts models.FilterOptions) []models.
 		}
 
 		// VRAM only filter
-		if opts.VRAMOnly && !r.Score.FitsInVRAM {
+		if opts.VRAMOnly && !r.Hardware.FitsInVRAM() {
 			continue
 		}
 
 		// Quantization filter
-		if opts.Quantization != "" && r.Model.Quantization != opts.Quantization {
+		if opts.Quantization != "" && r.Hardware.BestQuant != opts.Quantization {
 			continue
 		}
 
-		// Minimum quality filter — compare against QualityScore (benchmark-derived),
-		// not TotalScore (which includes hardware fit and throughput).
-		if opts.MinQuality > 0 && r.Score.QualityScore < opts.MinQuality {
+		// Minimum quality filter
+		if opts.MinQuality > 0 && r.Quality.Overall < opts.MinQuality {
 			continue
 		}
 

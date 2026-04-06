@@ -5,8 +5,8 @@ import (
 	"math"
 	"strings"
 
+	"github.com/kevo-1/KnowURLLM/internal/domain"
 	"github.com/kevo-1/KnowURLLM/internal/hardware"
-	"github.com/kevo-1/KnowURLLM/internal/models"
 )
 
 const (
@@ -213,7 +213,7 @@ func sizeForQuant(baseModelSizeBytes uint64, quant string) uint64 {
 
 // speedScore returns (score 0-100, estimated TPS).
 // Uses bandwidth-based estimation when GPU is known, falls back to param-count method.
-func speedScore(hw models.HardwareProfile, modelSizeBytes uint64, mode RunMode, quant string) (float64, float64) {
+func speedScore(hw domain.HardwareProfile, modelSizeBytes uint64, mode RunMode, quant string) (float64, float64) {
 	if modelSizeBytes == 0 {
 		return 0, 0
 	}
@@ -259,7 +259,7 @@ func speedScore(hw models.HardwareProfile, modelSizeBytes uint64, mode RunMode, 
 }
 
 // detectGPUBandwidth returns the best GPU bandwidth from the hardware profile.
-func detectGPUBandwidth(hw models.HardwareProfile) (float64, bool) {
+func detectGPUBandwidth(hw domain.HardwareProfile) (float64, bool) {
 	if len(hw.GPUs) == 0 {
 		return 0, false
 	}
@@ -278,7 +278,7 @@ func detectGPUBandwidth(hw models.HardwareProfile) (float64, bool) {
 }
 
 // kForBackend returns the K constant for the parameter-count fallback.
-func kForBackend(hw models.HardwareProfile) float64 {
+func kForBackend(hw domain.HardwareProfile) float64 {
 	// Check GPU first
 	for _, gpu := range hw.GPUs {
 		vendor := strings.ToLower(gpu.Vendor)
@@ -397,7 +397,7 @@ func weightsForUseCase(useCase string) UseCaseWeights {
 // Helper: total VRAM
 // ──────────────────────────────────────────────
 
-func totalVRAM(hw models.HardwareProfile) uint64 {
+func totalVRAM(hw domain.HardwareProfile) uint64 {
 	var vram uint64
 	for _, gpu := range hw.GPUs {
 		vram += gpu.VRAM
@@ -411,7 +411,7 @@ func totalVRAM(hw models.HardwareProfile) uint64 {
 
 // scoreModel computes the full ModelScore for a single ModelEntry.
 // Returns (modelScore, excluded).
-func scoreModel(hw models.HardwareProfile, entry models.ModelEntry) (models.ModelScore, bool) {
+func scoreModel(hw domain.HardwareProfile, entry domain.ModelEntry) (domain.ModelScore, bool) {
 	vram := totalVRAM(hw)
 
 	// Step 1: Select best quantization that fits available memory
@@ -425,7 +425,7 @@ func scoreModel(hw models.HardwareProfile, entry models.ModelEntry) (models.Mode
 	}
 
 	if bestQuant == "" {
-		return models.ModelScore{
+		return domain.ModelScore{
 			FitCategory:   "Too Tight",
 			FitReason:     "Too Tight — excluded",
 			SelectedQuant: "",
@@ -441,7 +441,7 @@ func scoreModel(hw models.HardwareProfile, entry models.ModelEntry) (models.Mode
 	// Step 4: Classify fit tier
 	tier, fitScore := fitTierAndScore(mode, modelSizeBytes, vram, hw.TotalRAM)
 	if tier == FitTooTight {
-		return models.ModelScore{
+		return domain.ModelScore{
 			FitCategory:   "Too Tight",
 			FitReason:     "Too Tight — excluded",
 			SelectedQuant: bestQuant,
@@ -461,7 +461,7 @@ func scoreModel(hw models.HardwareProfile, entry models.ModelEntry) (models.Mode
 	w := weightsForUseCase(entry.UseCase)
 	total := w.Quality*quality + w.Speed*tpsScore + w.Fit*fitScore + w.Context*ctx
 
-	return models.ModelScore{
+	return domain.ModelScore{
 		TotalScore:       total,
 		HardwareFitScore: fitScore,
 		ThroughputScore:  tpsScore,

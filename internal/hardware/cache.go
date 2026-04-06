@@ -3,14 +3,14 @@ package hardware
 import (
 	"sync"
 
-	"github.com/kevo-1/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/domain"
 )
 
 var (
 	// detectOnce ensures Detect() is only called once per program execution
 	detectOnce sync.Once
 	// cachedProfile stores the result of the first Detect() call
-	cachedProfile models.HardwareProfile
+	cachedProfile domain.HardwareProfile
 	// cachedErr stores the error from the first Detect() call
 	cachedErr error
 )
@@ -21,7 +21,7 @@ var (
 //
 // The first call performs full hardware detection and caches the result.
 // Subsequent calls return the cached profile immediately.
-func DetectCached() (models.HardwareProfile, error) {
+func DetectCached() (domain.HardwareProfile, error) {
 	detectOnce.Do(func() {
 		cachedProfile, cachedErr = Detect()
 	})
@@ -33,6 +33,6 @@ func DetectCached() (models.HardwareProfile, error) {
 // This is primarily useful for testing or if hardware somehow changes at runtime.
 func ResetCache() {
 	detectOnce = sync.Once{}
-	cachedProfile = models.HardwareProfile{}
+	cachedProfile = domain.HardwareProfile{}
 	cachedErr = nil
 }

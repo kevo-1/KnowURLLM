@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/kevo-1/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/domain"
 )
 
 // TestParseNvidiaSMIOutput tests the nvidia-smi CSV parser in isolation.
@@ -141,12 +141,12 @@ func TestNormalizeGPUVendor(t *testing.T) {
 func TestCalculateAvailableVRAM(t *testing.T) {
 	tests := []struct {
 		name     string
-		gpu      models.GPUInfo
+		gpu      domain.GPUInfo
 		expected uint64
 	}{
 		{
 			name: "Apple Silicon 16GB",
-			gpu: models.GPUInfo{
+			gpu: domain.GPUInfo{
 				Vendor: "apple",
 				Model:  "Apple M2",
 				VRAM:   16 * 1024 * 1024 * 1024,
@@ -158,7 +158,7 @@ func TestCalculateAvailableVRAM(t *testing.T) {
 		},
 		{
 			name: "NVIDIA GPU",
-			gpu: models.GPUInfo{
+			gpu: domain.GPUInfo{
 				Vendor: "nvidia",
 				Model:  "RTX 4090",
 				VRAM:   24 * 1024 * 1024 * 1024,
@@ -175,7 +175,7 @@ func TestCalculateAvailableVRAM(t *testing.T) {
 		},
 		{
 			name: "AMD desktop",
-			gpu: models.GPUInfo{
+			gpu: domain.GPUInfo{
 				Vendor: "amd",
 				Model:  "RX 7900 XTX",
 				VRAM:   24 * 1024 * 1024 * 1024,
@@ -187,7 +187,7 @@ func TestCalculateAvailableVRAM(t *testing.T) {
 		},
 		{
 			name: "Unknown vendor",
-			gpu: models.GPUInfo{
+			gpu: domain.GPUInfo{
 				Vendor: "unknown",
 				Model:  "Unknown GPU",
 				VRAM:   8 * 1024 * 1024 * 1024,
@@ -239,14 +239,14 @@ func TestGPUDetectionError(t *testing.T) {
 
 // TestMockDetector tests the mock detector interface
 func TestMockDetector(t *testing.T) {
-	profile := models.HardwareProfile{
+	profile := domain.HardwareProfile{
 		CPUModel:      "Test CPU",
 		CPUCores:      8,
 		TotalRAM:      16 * 1024 * 1024 * 1024,
 		AvailableRAM:  12 * 1024 * 1024 * 1024,
 		TotalVRAM:     24 * 1024 * 1024 * 1024,
 		AvailableVRAM: 20 * 1024 * 1024 * 1024,
-		GPUs: []models.GPUInfo{
+		GPUs: []domain.GPUInfo{
 			{Vendor: "nvidia", Model: "RTX 4090", VRAM: 24 * 1024 * 1024 * 1024},
 		},
 		Platform:       "linux",

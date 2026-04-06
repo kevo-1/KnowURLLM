@@ -1,5 +1,5 @@
 // Command knowurllm is a CLI tool that detects user hardware, fetches LLM models
-// from Hugging Face and Ollama, ranks them by hardware compatibility and performance,
+// from Hugging Face and Ollama, ranks them by quality tier and hardware compatibility,
 // and displays results in an interactive terminal interface.
 package main
 
@@ -12,7 +12,7 @@ import (
 
 	"github.com/kevo-1/KnowURLLM/internal/hardware"
 	"github.com/kevo-1/KnowURLLM/internal/registry"
-	"github.com/kevo-1/KnowURLLM/internal/scorer"
+	"github.com/kevo-1/KnowURLLM/internal/services"
 	"github.com/kevo-1/KnowURLLM/internal/tui"
 )
 
@@ -38,12 +38,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	// 3. Score and rank models
-	s := scorer.NewScorer()
-	results, err := s.Rank(hw, entries)
-	if err != nil {
-		log.Fatalf("scoring failed: %v", err)
-	}
+	// 3. Rank models by quality tier and hardware compatibility
+	ranker := services.NewRanker()
+	results := ranker.Rank(hw, entries)
 	if len(results) == 0 {
 		fmt.Fprintln(os.Stderr, "no models fit your hardware")
 		os.Exit(0)

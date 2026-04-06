@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kevo-1/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/domain"
 )
 
 // detectAMDGPUs detects AMD GPUs using rocm-smi first, falling back to sysfs.
-func detectAMDGPUs() ([]models.GPUInfo, error) {
+func detectAMDGPUs() ([]domain.GPUInfo, error) {
 	// Primary: rocm-smi
 	gpus, err := detectROCMSMI()
 	if err == nil && len(gpus) > 0 {
@@ -28,7 +28,7 @@ func detectAMDGPUs() ([]models.GPUInfo, error) {
 }
 
 // detectROCMSMI runs rocm-smi and parses the output.
-func detectROCMSMI() ([]models.GPUInfo, error) {
+func detectROCMSMI() ([]domain.GPUInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -44,8 +44,8 @@ func detectROCMSMI() ([]models.GPUInfo, error) {
 // parseROCMSMIOutput parses the CSV output of rocm-smi.
 // Expected format: "GPU ID, VRAM Total (MiB), ..."
 // More robust parsing that looks for VRAM-specific field labels.
-func parseROCMSMIOutput(raw string) ([]models.GPUInfo, error) {
-	var gpus []models.GPUInfo
+func parseROCMSMIOutput(raw string) ([]domain.GPUInfo, error) {
+	var gpus []domain.GPUInfo
 
 	lines := strings.Split(strings.TrimSpace(raw), "\n")
 	for _, line := range lines {
@@ -80,7 +80,7 @@ func parseROCMSMIOutput(raw string) ([]models.GPUInfo, error) {
 		}
 
 		vramBytes := maxVramMiB * 1024 * 1024
-		gpus = append(gpus, models.GPUInfo{
+		gpus = append(gpus, domain.GPUInfo{
 			Vendor: "amd",
 			Model:  "AMD GPU",
 			VRAM:   vramBytes,
@@ -95,7 +95,7 @@ func parseROCMSMIOutput(raw string) ([]models.GPUInfo, error) {
 }
 
 // detectAMDSysfs reads GPU info from /sys/class/drm/card*/device/.
-func detectAMDSysfs() ([]models.GPUInfo, error) {
+func detectAMDSysfs() ([]domain.GPUInfo, error) {
 	// Find all mem_info_vram_total files
 	matches, err := filepath.Glob("/sys/class/drm/card*/device/mem_info_vram_total")
 	if err != nil {
@@ -106,7 +106,7 @@ func detectAMDSysfs() ([]models.GPUInfo, error) {
 		return nil, fmt.Errorf("no AMD GPU sysfs entries found")
 	}
 
-	var gpus []models.GPUInfo
+	var gpus []domain.GPUInfo
 	for _, vramPath := range matches {
 		vramBytes, err := readSysfsUint64(vramPath)
 		if err != nil {
@@ -120,7 +120,7 @@ func detectAMDSysfs() ([]models.GPUInfo, error) {
 			productName = strings.TrimSpace(name)
 		}
 
-		gpus = append(gpus, models.GPUInfo{
+		gpus = append(gpus, domain.GPUInfo{
 			Vendor: "amd",
 			Model:  productName,
 			VRAM:   vramBytes,

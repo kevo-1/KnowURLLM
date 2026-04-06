@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/kevo-1/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/domain"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -48,13 +48,17 @@ func (m model) renderNormalLayout() string {
 	// Table
 	sections = append(sections, m.renderStyledTable())
 
-	// Detail panel (if there are results and not hidden)
-	if len(m.filteredResults) > 0 && m.detailView.Height > 0 {
+	// Detail panel (if there are results)
+	if len(m.filteredResults) > 0 && m.detailView.Height >= 0 {
 		cursor := m.table.Cursor()
 		if cursor >= 0 && cursor < len(m.filteredResults) {
 			result := m.filteredResults[cursor]
 			detailContent := renderDetailPanel(result, m.detailView.Width, m.detailExpanded)
 			m.detailView.SetContent(detailContent)
+			// Ensure minimum height for visibility
+			if m.detailView.Height < 5 {
+				m.detailView.Height = 5
+			}
 			sections = append(sections, m.detailView.View())
 		}
 	}
@@ -81,10 +85,14 @@ func (m model) renderWideLayout() string {
 
 		cursor := m.table.Cursor()
 		var detailSection string
-		if cursor >= 0 && cursor < len(m.filteredResults) && m.detailView.Height > 0 {
+		if cursor >= 0 && cursor < len(m.filteredResults) && m.detailView.Height >= 0 {
 			result := m.filteredResults[cursor]
 			detailContent := renderDetailPanel(result, m.detailView.Width, m.detailExpanded)
 			m.detailView.SetContent(detailContent)
+			// Ensure minimum height for visibility
+			if m.detailView.Height < 5 {
+				m.detailView.Height = 5
+			}
 			detailSection = m.detailView.View()
 		}
 
@@ -170,7 +178,7 @@ func (m model) renderStyledTable() string {
 	var styledRows []string
 
 	// Column header row
-	colHeaders := []string{"Rank", "Model", "Size", "TPS", "Score", "Fit"}
+	colHeaders := []string{"Rank", "Tier", "Model", "Size", "TPS", "Quality", "Fit"}
 	headerRow := headerStyle.Render(formatTableRow(colHeaders, m.cachedTableWidth))
 	styledRows = append(styledRows, headerRow)
 
@@ -203,25 +211,26 @@ func (m model) renderStyledTable() string {
 }
 
 // buildStyledRow creates a styled table row string.
-func buildStyledRow(r models.RankResult, isSelected bool, availableWidth int) string {
+func buildStyledRow(r domain.RankedModel, isSelected bool, availableWidth int) string {
 	rank := formatRank(r.Rank)
+	tier := formatTier(r.Quality.Tier)
 	modelName := truncate(r.Model.DisplayName, colModelWidth)
 	size := formatBytes(r.Model.ModelSizeBytes)
-	tps := formatTPSInt(r.Score.EstimatedTPS)
-	score := formatScore(r.Score.TotalScore)
-	fit := formatFitBadge(r.Score)
+	tps := formatTPSInt(r.Hardware.EstimatedTPS)
+	quality := formatQualityScore(r.Quality)
+	fit := formatFitBadge(r.Hardware)
 
-	cols := []string{rank, modelName, size, tps, score, fit}
+	cols := []string{rank, tier, modelName, size, tps, quality, fit}
 
 	row := formatTableRow(cols, availableWidth)
 	if isSelected {
 		row = selectedRowStyle.Render(row)
 	}
 
-	// Highlight score for top 3
+	// Highlight tier for top 3
 	if !isSelected && r.Rank <= 3 {
-		goldScore := goldStyle.Render(score)
-		cols[4] = goldScore
+		goldTier := goldStyle.Render(tier)
+		cols[1] = goldTier
 		row = formatTableRow(cols, availableWidth)
 	}
 
@@ -233,10 +242,11 @@ func formatTableRow(cols []string, availableWidth int) string {
 	// Calculate column widths: fixed minimums + remainder to Model column
 	minWidths := []int{
 		colRankWidth,  // Rank: 5
-		colModelWidth, // Model: 30 (gets remainder)
+		colTierWidth,  // Tier: 5
+		colModelWidth, // Model: gets remainder
 		colSizeWidth,  // Size: 8
 		colTPSWidth,   // TPS: 7
-		colScoreWidth, // Score: 9
+		colQualWidth,  // Quality: 10
 		colFitWidth,   // Fit: 10
 	}
 

@@ -1,20 +1,20 @@
 package hardware
 
 import (
-	"github.com/kevo-1/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/domain"
 )
 
 // HardwareDetector is an interface for hardware detection, enabling mocking in tests.
 // The default implementation is RealDetector, which calls actual system commands.
 type HardwareDetector interface {
 	// Detect performs full hardware detection
-	Detect() (models.HardwareProfile, error)
+	Detect() (domain.HardwareProfile, error)
 	// DetectCPU detects CPU model and core count
 	DetectCPU() (string, int, error)
 	// DetectMemory detects total and available RAM
 	DetectMemory() (uint64, uint64, error)
 	// DetectGPU detects GPUs
-	DetectGPU() ([]models.GPUInfo, error)
+	DetectGPU() ([]domain.GPUInfo, error)
 }
 
 // RealDetector is the default hardware detector that calls system commands
@@ -26,7 +26,7 @@ func NewRealDetector() *RealDetector {
 }
 
 // Detect performs full hardware detection using system commands
-func (d *RealDetector) Detect() (models.HardwareProfile, error) {
+func (d *RealDetector) Detect() (domain.HardwareProfile, error) {
 	return Detect()
 }
 
@@ -41,18 +41,18 @@ func (d *RealDetector) DetectMemory() (uint64, uint64, error) {
 }
 
 // DetectGPU detects GPUs
-func (d *RealDetector) DetectGPU() ([]models.GPUInfo, error) {
+func (d *RealDetector) DetectGPU() ([]domain.GPUInfo, error) {
 	return gpu()
 }
 
 // MockDetector is a test double that returns predefined values
 type MockDetector struct {
-	Profile models.HardwareProfile
+	Profile domain.HardwareProfile
 	Err     error
 }
 
 // NewMockDetector creates a MockDetector with the given profile
-func NewMockDetector(profile models.HardwareProfile, err error) *MockDetector {
+func NewMockDetector(profile domain.HardwareProfile, err error) *MockDetector {
 	return &MockDetector{
 		Profile: profile,
 		Err:     err,
@@ -60,7 +60,7 @@ func NewMockDetector(profile models.HardwareProfile, err error) *MockDetector {
 }
 
 // Detect returns the mocked profile
-func (d *MockDetector) Detect() (models.HardwareProfile, error) {
+func (d *MockDetector) Detect() (domain.HardwareProfile, error) {
 	return d.Profile, d.Err
 }
 
@@ -75,6 +75,6 @@ func (d *MockDetector) DetectMemory() (uint64, uint64, error) {
 }
 
 // DetectGPU returns the mocked GPU info
-func (d *MockDetector) DetectGPU() ([]models.GPUInfo, error) {
+func (d *MockDetector) DetectGPU() ([]domain.GPUInfo, error) {
 	return d.Profile.GPUs, d.Err
 }

@@ -5,12 +5,12 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/kevo-1/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/domain"
 )
 
 // calculateAvailableVRAM estimates the actually usable VRAM for a GPU,
 // accounting for OS reservations, display output, and driver overhead.
-func calculateAvailableVRAM(gpu models.GPUInfo) uint64 {
+func calculateAvailableVRAM(gpu domain.GPUInfo) uint64 {
 	switch gpu.Vendor {
 	case "apple":
 		// Apple Silicon unified memory: ~25% reserved for OS/display

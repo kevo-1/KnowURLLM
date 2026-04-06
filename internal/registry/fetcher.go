@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kevo-1/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/domain"
 )
 
 //go:embed data
@@ -50,7 +50,7 @@ func NewFetcher(opts ...Option) *Fetcher {
 
 // FetchAll loads all models from the embedded JSON data file.
 // Returns models sorted by downloads descending.
-func (f *Fetcher) FetchAll(ctx context.Context) ([]models.ModelEntry, error) {
+func (f *Fetcher) FetchAll(ctx context.Context) ([]domain.ModelEntry, error) {
 	_ = ctx // no network calls needed
 
 	// Read embedded data
@@ -66,7 +66,7 @@ func (f *Fetcher) FetchAll(ctx context.Context) ([]models.ModelEntry, error) {
 	}
 
 	// Convert to ModelEntry
-	entries := make([]models.ModelEntry, 0, len(rawModels))
+	entries := make([]domain.ModelEntry, 0, len(rawModels))
 	for _, raw := range rawModels {
 		entry := hfModelToEntry(raw)
 		entries = append(entries, entry)
@@ -87,19 +87,19 @@ func (f *Fetcher) FetchAll(ctx context.Context) ([]models.ModelEntry, error) {
 }
 
 // FetchHuggingFace is a compatibility alias — loads all models from the data file.
-func (f *Fetcher) FetchHuggingFace(ctx context.Context) ([]models.ModelEntry, error) {
+func (f *Fetcher) FetchHuggingFace(ctx context.Context) ([]domain.ModelEntry, error) {
 	return f.FetchAll(ctx)
 }
 
-// FetchOllama queries the Ollama library API for available models.
+// FetchOllama queries the Ollama library API for available domain.
 // https://ollama.com/search provides a public API at /api/library.
-func (f *Fetcher) FetchOllama(ctx context.Context) ([]models.ModelEntry, error) {
+func (f *Fetcher) FetchOllama(ctx context.Context) ([]domain.ModelEntry, error) {
 	// Ollama's library API returns model entries with metadata.
 	// We fetch the top models and convert them to our internal format.
 	entries, err := fetchOllamaLibrary(ctx)
 	if err != nil {
 		log.Printf("warning: Ollama fetch failed, returning empty: %v", err)
-		return []models.ModelEntry{}, nil
+		return []domain.ModelEntry{}, nil
 	}
 
 	// Sort by popularity (downloads descending)
@@ -145,8 +145,8 @@ type ollamaTag struct {
 	Quant      string `json:"quantization_level"`
 }
 
-// fetchOllamaLibrary queries the Ollama API for available models.
-func fetchOllamaLibrary(ctx context.Context) ([]models.ModelEntry, error) {
+// fetchOllamaLibrary queries the Ollama API for available domain.
+func fetchOllamaLibrary(ctx context.Context) ([]domain.ModelEntry, error) {
 	client := &http.Client{Timeout: 30 * time.Second}
 
 	// Ollama doesn't have a single "list all models" API that returns everything.
@@ -161,7 +161,7 @@ func fetchOllamaLibrary(ctx context.Context) ([]models.ModelEntry, error) {
 
 	// Use channels to collect results from goroutines
 	type searchResult struct {
-		entries []models.ModelEntry
+		entries []domain.ModelEntry
 	}
 	resultCh := make(chan searchResult, len(searchQueries))
 
@@ -217,9 +217,9 @@ func fetchOllamaLibrary(ctx context.Context) ([]models.ModelEntry, error) {
 				return
 			}
 
-			var entries []models.ModelEntry
+			var entries []domain.ModelEntry
 			for _, m := range libResp.Models {
-				entry := models.ModelEntry{
+				entry := domain.ModelEntry{
 					ID:          m.Name,
 					DisplayName: m.DisplayName,
 					Source:      "ollama",
@@ -254,7 +254,7 @@ func fetchOllamaLibrary(ctx context.Context) ([]models.ModelEntry, error) {
 
 	// Collect and deduplicate results
 	seen := make(map[string]bool)
-	var allEntries []models.ModelEntry
+	var allEntries []domain.ModelEntry
 
 	for i := 0; i < len(searchQueries); i++ {
 		select {
@@ -357,7 +357,7 @@ type hfModel struct {
 }
 
 // hfModelToEntry converts a raw JSON model entry to the internal ModelEntry.
-func hfModelToEntry(raw hfModel) models.ModelEntry {
+func hfModelToEntry(raw hfModel) domain.ModelEntry {
 	// Calculate model size in bytes from parameters_raw and quantization
 	modelSizeBytes := calcModelSize(raw.ParamsRaw, raw.Quantization)
 
@@ -380,7 +380,7 @@ func hfModelToEntry(raw hfModel) models.ModelEntry {
 		arenaELO = elo
 	}
 
-	return models.ModelEntry{
+	return domain.ModelEntry{
 		ID:             raw.Name,
 		DisplayName:    displayName,
 		ModelSizeBytes: modelSizeBytes,
@@ -392,6 +392,9 @@ func hfModelToEntry(raw hfModel) models.ModelEntry {
 		Downloads:      raw.HFDownloads,
 		URL:            url,
 		Tags:           tags,
+		IsMoE:          raw.IsMoE,
+		ActiveParams:   raw.ActiveParams,
+		ParameterCount: raw.ParamsRaw,
 	}
 }
 

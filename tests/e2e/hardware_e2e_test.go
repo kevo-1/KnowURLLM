@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kevo-1/KnowURLLM/internal/domain"
 	"github.com/kevo-1/KnowURLLM/internal/hardware"
-	"github.com/kevo-1/KnowURLLM/internal/models"
 	"github.com/kevo-1/KnowURLLM/internal/registry"
 	"github.com/kevo-1/KnowURLLM/internal/scorer"
 )
@@ -517,7 +517,7 @@ func TestE2E_ScorerWithFilterVRAMOnly(t *testing.T) {
 	}
 
 	// With VRAM-only filter
-	vramResults, err := s.RankWithFilter(profile, entries, models.FilterOptions{
+	vramResults, err := s.RankWithFilter(profile, entries, domain.FilterOptions{
 		VRAMOnly: true,
 	})
 	if err != nil {
@@ -572,7 +572,7 @@ func TestE2E_FullPipeline(t *testing.T) {
 	}
 
 	// Find models that fit well
-	var goodFit []models.RankResult
+	var goodFit []domain.RankResult
 	for _, r := range results {
 		if r.Score.FitCategory == "Perfect" || r.Score.FitCategory == "Good" {
 			goodFit = append(goodFit, r)
@@ -698,7 +698,7 @@ func TestE2E_MockDetectorErrorPaths(t *testing.T) {
 	testErr := fmt.Errorf("simulated detection error")
 
 	t.Run("CPU error propagates", func(t *testing.T) {
-		profile := models.HardwareProfile{}
+		profile := domain.HardwareProfile{}
 		detector := hardware.NewMockDetector(profile, testErr)
 		_, _, err := detector.DetectCPU()
 		if err != testErr {
@@ -707,7 +707,7 @@ func TestE2E_MockDetectorErrorPaths(t *testing.T) {
 	})
 
 	t.Run("Memory error propagates", func(t *testing.T) {
-		profile := models.HardwareProfile{}
+		profile := domain.HardwareProfile{}
 		detector := hardware.NewMockDetector(profile, testErr)
 		_, _, err := detector.DetectMemory()
 		if err != testErr {
@@ -716,7 +716,7 @@ func TestE2E_MockDetectorErrorPaths(t *testing.T) {
 	})
 
 	t.Run("GPU error propagates", func(t *testing.T) {
-		profile := models.HardwareProfile{}
+		profile := domain.HardwareProfile{}
 		detector := hardware.NewMockDetector(profile, testErr)
 		_, err := detector.DetectGPU()
 		if err != testErr {
@@ -725,7 +725,7 @@ func TestE2E_MockDetectorErrorPaths(t *testing.T) {
 	})
 
 	t.Run("Detect returns error", func(t *testing.T) {
-		profile := models.HardwareProfile{}
+		profile := domain.HardwareProfile{}
 		detector := hardware.NewMockDetector(profile, testErr)
 		_, err := detector.Detect()
 		if err != testErr {
@@ -736,12 +736,12 @@ func TestE2E_MockDetectorErrorPaths(t *testing.T) {
 
 // TestE2E_MockDetectorEmptyGPU tests MockDetector with zero GPUs
 func TestE2E_MockDetectorEmptyGPU(t *testing.T) {
-	profile := models.HardwareProfile{
+	profile := domain.HardwareProfile{
 		CPUModel:     "Test CPU",
 		CPUCores:     4,
 		TotalRAM:     16 * 1024 * 1024 * 1024,
 		AvailableRAM: 12 * 1024 * 1024 * 1024,
-		GPUs:         []models.GPUInfo{}, // empty, not nil
+		GPUs:         []domain.GPUInfo{}, // empty, not nil
 		Platform:     "windows",
 	}
 

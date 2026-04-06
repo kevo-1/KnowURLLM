@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/kevo-1/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/domain"
 )
 
 // ──────────────────────────────────────────────
@@ -240,7 +240,7 @@ func TestSpeedScore(t *testing.T) {
 	tests := []struct {
 		name         string
 		modelSizeGB  float64
-		hw           models.HardwareProfile
+		hw           domain.HardwareProfile
 		mode         RunMode
 		quant        string
 		wantTPSMin   float64
@@ -249,8 +249,8 @@ func TestSpeedScore(t *testing.T) {
 		{
 			name:        "GPU inference with known bandwidth (RTX 4090)",
 			modelSizeGB: 4.0,
-			hw: models.HardwareProfile{
-				GPUs: []models.GPUInfo{{Vendor: "nvidia", Model: "NVIDIA GeForce RTX 4090", VRAM: 24 * GB}},
+			hw: domain.HardwareProfile{
+				GPUs: []domain.GPUInfo{{Vendor: "nvidia", Model: "NVIDIA GeForce RTX 4090", VRAM: 24 * GB}},
 			},
 			mode:         RunModeGPU,
 			quant:        "Q4_K_M",
@@ -260,9 +260,9 @@ func TestSpeedScore(t *testing.T) {
 		{
 			name:        "CPU inference — no GPU",
 			modelSizeGB: 4.0,
-			hw: models.HardwareProfile{
+			hw: domain.HardwareProfile{
 				CPUModel: "AMD Ryzen 9 7950X",
-				GPUs:     []models.GPUInfo{},
+				GPUs:     []domain.GPUInfo{},
 			},
 			mode:         RunModeCPU,
 			quant:        "Q4_K_M",
@@ -272,7 +272,7 @@ func TestSpeedScore(t *testing.T) {
 		{
 			name:        "zero size",
 			modelSizeGB: 0,
-			hw:          models.HardwareProfile{},
+			hw:          domain.HardwareProfile{},
 			mode:        RunModeCPU,
 			quant:        "Q4_K_M",
 			wantTPSMin:   0,
@@ -482,20 +482,20 @@ func TestQuantSpeedMultiplier(t *testing.T) {
 func TestTotalVRAM(t *testing.T) {
 	tests := []struct {
 		name string
-		hw   models.HardwareProfile
+		hw   domain.HardwareProfile
 		want uint64
 	}{
 		{
 			name: "single GPU",
-			hw: models.HardwareProfile{
-				GPUs: []models.GPUInfo{{Vendor: "nvidia", VRAM: 8 * GB}},
+			hw: domain.HardwareProfile{
+				GPUs: []domain.GPUInfo{{Vendor: "nvidia", VRAM: 8 * GB}},
 			},
 			want: 8 * GB,
 		},
 		{
 			name: "multiple GPUs",
-			hw: models.HardwareProfile{
-				GPUs: []models.GPUInfo{
+			hw: domain.HardwareProfile{
+				GPUs: []domain.GPUInfo{
 					{Vendor: "nvidia", VRAM: 8 * GB},
 					{Vendor: "nvidia", VRAM: 16 * GB},
 				},
@@ -504,7 +504,7 @@ func TestTotalVRAM(t *testing.T) {
 		},
 		{
 			name: "no GPUs",
-			hw:   models.HardwareProfile{GPUs: []models.GPUInfo{}},
+			hw:   domain.HardwareProfile{GPUs: []domain.GPUInfo{}},
 			want: 0,
 		},
 	}
@@ -524,15 +524,15 @@ func TestTotalVRAM(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestRank_BasicExclusion(t *testing.T) {
-	hw := models.HardwareProfile{
+	hw := domain.HardwareProfile{
 		TotalRAM: 32 * 1024 * 1024 * 1024,
 		CPUCores: 16,
-		GPUs: []models.GPUInfo{
+		GPUs: []domain.GPUInfo{
 			{Vendor: "nvidia", VRAM: 8 * 1024 * 1024 * 1024},
 		},
 	}
 
-	entries := []models.ModelEntry{
+	entries := []domain.ModelEntry{
 		{ID: "small", ModelSizeBytes: 4_000_000_000, Quantization: "Q4_K_M"},
 		{ID: "medium", ModelSizeBytes: 16_000_000_000, Quantization: "Q4_K_M"},
 		{ID: "large", ModelSizeBytes: 200_000_000_000, Quantization: "FP16"},
@@ -575,7 +575,7 @@ func TestRank_BasicExclusion(t *testing.T) {
 
 func TestRank_NilEntries(t *testing.T) {
 	scorer := NewScorer()
-	hw := models.HardwareProfile{TotalRAM: 32 * GB, CPUCores: 16}
+	hw := domain.HardwareProfile{TotalRAM: 32 * GB, CPUCores: 16}
 
 	_, err := scorer.Rank(hw, nil)
 	if err == nil {
@@ -585,8 +585,8 @@ func TestRank_NilEntries(t *testing.T) {
 
 func TestRank_ZeroRAM(t *testing.T) {
 	scorer := NewScorer()
-	hw := models.HardwareProfile{TotalRAM: 0, CPUCores: 16}
-	entries := []models.ModelEntry{{ID: "test", ModelSizeBytes: 4 * GB}}
+	hw := domain.HardwareProfile{TotalRAM: 0, CPUCores: 16}
+	entries := []domain.ModelEntry{{ID: "test", ModelSizeBytes: 4 * GB}}
 
 	_, err := scorer.Rank(hw, entries)
 	if err == nil {
@@ -595,14 +595,14 @@ func TestRank_ZeroRAM(t *testing.T) {
 }
 
 func TestRank_Tiebreaker(t *testing.T) {
-	hw := models.HardwareProfile{
+	hw := domain.HardwareProfile{
 		TotalRAM: 32 * GB,
 		CPUCores: 16,
-		GPUs:     []models.GPUInfo{{Vendor: "nvidia", VRAM: 24 * GB}},
+		GPUs:     []domain.GPUInfo{{Vendor: "nvidia", VRAM: 24 * GB}},
 	}
 
 	// Two identical models — tiebreaker should use downloads, then name
-	entries := []models.ModelEntry{
+	entries := []domain.ModelEntry{
 		{
 			ID:             "model-b",
 			DisplayName:    "Model B",
@@ -636,13 +636,13 @@ func TestRank_Tiebreaker(t *testing.T) {
 }
 
 func TestRank_Tiebreaker_Alphabetical(t *testing.T) {
-	hw := models.HardwareProfile{
+	hw := domain.HardwareProfile{
 		TotalRAM: 32 * GB,
 		CPUCores: 16,
-		GPUs:     []models.GPUInfo{{Vendor: "nvidia", VRAM: 24 * GB}},
+		GPUs:     []domain.GPUInfo{{Vendor: "nvidia", VRAM: 24 * GB}},
 	}
 
-	entries := []models.ModelEntry{
+	entries := []domain.ModelEntry{
 		{
 			ID:             "model-z",
 			DisplayName:    "Model Z",
@@ -675,19 +675,19 @@ func TestRank_Tiebreaker_Alphabetical(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestRankWithFilter_VRAMOnly(t *testing.T) {
-	hw := models.HardwareProfile{
+	hw := domain.HardwareProfile{
 		TotalRAM: 32 * GB,
 		CPUCores: 16,
-		GPUs:     []models.GPUInfo{{Vendor: "nvidia", VRAM: 8 * GB}},
+		GPUs:     []domain.GPUInfo{{Vendor: "nvidia", VRAM: 8 * GB}},
 	}
 
-	entries := []models.ModelEntry{
+	entries := []domain.ModelEntry{
 		{ID: "small", ModelSizeBytes: 4 * GB, Quantization: "Q4_K_M"},
 		{ID: "medium", ModelSizeBytes: 16 * GB, Quantization: "Q4_K_M"},
 	}
 
 	scorer := NewScorer()
-	results, err := scorer.RankWithFilter(hw, entries, models.FilterOptions{VRAMOnly: true})
+	results, err := scorer.RankWithFilter(hw, entries, domain.FilterOptions{VRAMOnly: true})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -702,18 +702,18 @@ func TestRankWithFilter_VRAMOnly(t *testing.T) {
 }
 
 func TestRankWithFilter_Source(t *testing.T) {
-	hw := models.HardwareProfile{
+	hw := domain.HardwareProfile{
 		TotalRAM: 32 * GB,
 		CPUCores: 16,
 	}
 
-	entries := []models.ModelEntry{
+	entries := []domain.ModelEntry{
 		{ID: "hf-model", ModelSizeBytes: 4 * GB, Source: "huggingface"},
 		{ID: "ollama-model", ModelSizeBytes: 4 * GB, Source: "ollama"},
 	}
 
 	scorer := NewScorer()
-	results, err := scorer.RankWithFilter(hw, entries, models.FilterOptions{Source: "huggingface"})
+	results, err := scorer.RankWithFilter(hw, entries, domain.FilterOptions{Source: "huggingface"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -728,18 +728,18 @@ func TestRankWithFilter_Source(t *testing.T) {
 }
 
 func TestRankWithFilter_Quantization(t *testing.T) {
-	hw := models.HardwareProfile{
+	hw := domain.HardwareProfile{
 		TotalRAM: 32 * GB,
 		CPUCores: 16,
 	}
 
-	entries := []models.ModelEntry{
+	entries := []domain.ModelEntry{
 		{ID: "q4-model", ModelSizeBytes: 4 * GB, Quantization: "Q4_K_M"},
 		{ID: "q8-model", ModelSizeBytes: 4 * GB, Quantization: "Q8_0"},
 	}
 
 	scorer := NewScorer()
-	results, err := scorer.RankWithFilter(hw, entries, models.FilterOptions{Quantization: "Q4_K_M"})
+	results, err := scorer.RankWithFilter(hw, entries, domain.FilterOptions{Quantization: "Q4_K_M"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -754,18 +754,18 @@ func TestRankWithFilter_Quantization(t *testing.T) {
 }
 
 func TestRankWithFilter_SearchQuery(t *testing.T) {
-	hw := models.HardwareProfile{
+	hw := domain.HardwareProfile{
 		TotalRAM: 32 * GB,
 		CPUCores: 16,
 	}
 
-	entries := []models.ModelEntry{
+	entries := []domain.ModelEntry{
 		{ID: "llama-model", DisplayName: "Llama 3.1 8B", ModelSizeBytes: 4 * GB, Tags: []string{"text-generation", "conversational"}},
 		{ID: "mistral-model", DisplayName: "Mistral 7B", ModelSizeBytes: 4 * GB, Tags: []string{"text-generation"}},
 	}
 
 	scorer := NewScorer()
-	results, err := scorer.RankWithFilter(hw, entries, models.FilterOptions{SearchQuery: "llama"})
+	results, err := scorer.RankWithFilter(hw, entries, domain.FilterOptions{SearchQuery: "llama"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -780,18 +780,18 @@ func TestRankWithFilter_SearchQuery(t *testing.T) {
 }
 
 func TestRankWithFilter_MinQuality(t *testing.T) {
-	hw := models.HardwareProfile{
+	hw := domain.HardwareProfile{
 		TotalRAM: 32 * GB,
 		CPUCores: 16,
 	}
 
-	entries := []models.ModelEntry{
+	entries := []domain.ModelEntry{
 		{ID: "high-quality", ModelSizeBytes: 4 * GB, MMLUScore: 75.0},
 		{ID: "low-quality", ModelSizeBytes: 4 * GB, MMLUScore: 40.0},
 	}
 
 	scorer := NewScorer()
-	results, err := scorer.RankWithFilter(hw, entries, models.FilterOptions{MinQuality: 60.0})
+	results, err := scorer.RankWithFilter(hw, entries, domain.FilterOptions{MinQuality: 60.0})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -810,13 +810,13 @@ func TestRankWithFilter_MinQuality(t *testing.T) {
 // ──────────────────────────────────────────────
 
 func TestScoreModel(t *testing.T) {
-	hw := models.HardwareProfile{
+	hw := domain.HardwareProfile{
 		TotalRAM: 32 * GB,
 		CPUCores: 16,
-		GPUs:     []models.GPUInfo{{Vendor: "nvidia", VRAM: 8 * GB}},
+		GPUs:     []domain.GPUInfo{{Vendor: "nvidia", VRAM: 8 * GB}},
 	}
 
-	entry := models.ModelEntry{
+	entry := domain.ModelEntry{
 		ID:             "test-model",
 		ModelSizeBytes: 4 * GB,
 		Quantization:   "Q4_K_M",
@@ -852,13 +852,13 @@ func TestScoreModel(t *testing.T) {
 }
 
 func TestScoreModel_Excluded(t *testing.T) {
-	hw := models.HardwareProfile{
+	hw := domain.HardwareProfile{
 		TotalRAM: 8 * GB,
 		CPUCores: 4,
-		GPUs:     []models.GPUInfo{},
+		GPUs:     []domain.GPUInfo{},
 	}
 
-	entry := models.ModelEntry{
+	entry := domain.ModelEntry{
 		ID:             "huge-model",
 		ModelSizeBytes: 200 * GB,
 	}
@@ -870,13 +870,13 @@ func TestScoreModel_Excluded(t *testing.T) {
 }
 
 func TestScoreModel_SelectedQuant(t *testing.T) {
-	hw := models.HardwareProfile{
+	hw := domain.HardwareProfile{
 		TotalRAM: 32 * GB,
 		CPUCores: 16,
-		GPUs:     []models.GPUInfo{{Vendor: "nvidia", VRAM: 24 * GB}},
+		GPUs:     []domain.GPUInfo{{Vendor: "nvidia", VRAM: 24 * GB}},
 	}
 
-	entry := models.ModelEntry{
+	entry := domain.ModelEntry{
 		ID:             "test-model",
 		ModelSizeBytes: 4 * GB,
 	}

@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"runtime"
 
-	"github.com/kevo-1/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/domain"
 )
 
 // Detect returns the hardware profile of the current machine.
 // On partial failure (e.g. GPU detection fails), returns a populated profile
 // with zeroed GPU fields and a wrapped error — does NOT return an empty profile.
-func Detect() (models.HardwareProfile, error) {
-	var profile models.HardwareProfile
+func Detect() (domain.HardwareProfile, error) {
+	var profile domain.HardwareProfile
 
 	// Detect CPU
 	cpuModel, cpuCores, err := detectCPU()
@@ -34,7 +34,7 @@ func Detect() (models.HardwareProfile, error) {
 	gpus, gpuErr := gpu()
 	if gpuErr != nil {
 		// Log GPU detection failure but still return the rest of the profile
-		profile.GPUs = []models.GPUInfo{} // zeroed, not nil
+		profile.GPUs = []domain.GPUInfo{} // zeroed, not nil
 		profile.TotalVRAM = 0
 		profile.AvailableVRAM = 0
 		// Return profile with wrapped GPU error

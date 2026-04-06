@@ -10,13 +10,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kevo-1/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/domain"
 )
 
 // detectNvidiaGPUs detects NVIDIA GPUs using nvidia-smi.
 // On Linux, falls back to NVML (see gpu_nvidia_nvml.go).
 // On Windows, nvidia-smi is the only method.
-func detectNvidiaGPUs() ([]models.GPUInfo, error) {
+func detectNvidiaGPUs() ([]domain.GPUInfo, error) {
 	// Primary: nvidia-smi
 	gpus, err := detectNvidiaSMI()
 	if err == nil && len(gpus) > 0 {
@@ -28,7 +28,7 @@ func detectNvidiaGPUs() ([]models.GPUInfo, error) {
 }
 
 // detectNvidiaSMI runs nvidia-smi and parses the output.
-func detectNvidiaSMI() ([]models.GPUInfo, error) {
+func detectNvidiaSMI() ([]domain.GPUInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -46,8 +46,8 @@ func detectNvidiaSMI() ([]models.GPUInfo, error) {
 // parseNvidiaSMIOutput parses the CSV output of nvidia-smi.
 // Expected format per line: "NVIDIA GeForce RTX 4090, 24576"
 // Handles GPU names with commas by taking the last field as VRAM.
-func parseNvidiaSMIOutput(raw string) []models.GPUInfo {
-	var gpus []models.GPUInfo
+func parseNvidiaSMIOutput(raw string) []domain.GPUInfo {
+	var gpus []domain.GPUInfo
 
 	lines := strings.Split(strings.TrimSpace(raw), "\n")
 	for _, line := range lines {
@@ -73,7 +73,7 @@ func parseNvidiaSMIOutput(raw string) []models.GPUInfo {
 		// Convert MiB to bytes
 		vramBytes := vramMiB * 1024 * 1024
 
-		gpus = append(gpus, models.GPUInfo{
+		gpus = append(gpus, domain.GPUInfo{
 			Vendor: normalizeGPUVendor(model),
 			Model:  model,
 			VRAM:   vramBytes,
@@ -85,6 +85,6 @@ func parseNvidiaSMIOutput(raw string) []models.GPUInfo {
 
 // detectNVMLFallback is a stub for Windows — NVML requires C headers not available on Windows.
 // On Linux, the real implementation is in gpu_nvidia_nvml.go.
-func detectNVMLFallback() ([]models.GPUInfo, error) {
+func detectNVMLFallback() ([]domain.GPUInfo, error) {
 	return nil, fmt.Errorf("nvml not available on this platform")
 }

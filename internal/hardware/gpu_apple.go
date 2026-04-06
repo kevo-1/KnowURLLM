@@ -11,12 +11,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kevo-1/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/domain"
 )
 
 // detectAppleGPU detects GPU information on macOS.
 // Handles both Apple Silicon (M1/M2/M3) and Intel Macs with integrated GPUs.
-func detectAppleGPU() ([]models.GPUInfo, error) {
+func detectAppleGPU() ([]domain.GPUInfo, error) {
 	// Check if this is Apple Silicon or Intel
 	if isAppleSiliconMac() {
 		return detectAppleSiliconGPU()
@@ -37,7 +37,7 @@ func isAppleSiliconMac() bool {
 }
 
 // detectAppleSiliconGPU detects GPU on Apple Silicon Macs
-func detectAppleSiliconGPU() ([]models.GPUInfo, error) {
+func detectAppleSiliconGPU() ([]domain.GPUInfo, error) {
 	// Get total unified memory via sysctl
 	totalMem, err := getUnifiedMemoryBytes()
 	if err != nil {
@@ -54,7 +54,7 @@ func detectAppleSiliconGPU() ([]models.GPUInfo, error) {
 	// We report the full unified memory as "VRAM" because the GPU can access
 	// the entire memory pool. The calculateAvailableVRAM() function will
 	// apply the ~25% OS reservation factor when computing usable memory.
-	return []models.GPUInfo{
+	return []domain.GPUInfo{
 		{
 			Vendor: normalizeGPUVendor(gpuModel),
 			Model:  gpuModel,
@@ -133,7 +133,7 @@ func getGPUModelName() (string, error) {
 }
 
 // detectIntelMacGPU detects GPU on Intel-based Macs
-func detectIntelMacGPU() ([]models.GPUInfo, error) {
+func detectIntelMacGPU() ([]domain.GPUInfo, error) {
 	// Use system_profiler to get GPU info on Intel Macs
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -147,13 +147,13 @@ func detectIntelMacGPU() ([]models.GPUInfo, error) {
 }
 
 // parseIntelMacGPUOutput parses system_profiler output for Intel Mac GPUs
-func parseIntelMacGPUOutput(raw string) ([]models.GPUInfo, error) {
+func parseIntelMacGPUOutput(raw string) ([]domain.GPUInfo, error) {
 	var result map[string]interface{}
 	if err := json.Unmarshal([]byte(raw), &result); err != nil {
 		return nil, fmt.Errorf("parsing system_profiler JSON: %w", err)
 	}
 
-	var gpus []models.GPUInfo
+	var gpus []domain.GPUInfo
 
 	// Navigate to GPU data
 	data, ok := result["SPDisplaysDataType"].([]interface{})
@@ -180,7 +180,7 @@ func parseIntelMacGPUOutput(raw string) ([]models.GPUInfo, error) {
 						// We use a conservative 1GB estimate for scoring purposes
 						vramBytes := uint64(1024 * 1024 * 1024) // 1GB
 
-						gpus = append(gpus, models.GPUInfo{
+						gpus = append(gpus, domain.GPUInfo{
 							Vendor: normalizeGPUVendor(gpuName),
 							Model:  gpuName,
 							VRAM:   vramBytes,

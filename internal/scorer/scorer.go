@@ -4,7 +4,7 @@ package scorer
 import (
 	"errors"
 
-	"github.com/kevo-1/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/domain"
 )
 
 // Scorer calculates how well each model runs on the given hardware.
@@ -17,7 +17,7 @@ func NewScorer() *Scorer {
 }
 
 // validateInput checks that the inputs are valid.
-func validateInput(hw models.HardwareProfile, entries []models.ModelEntry) error {
+func validateInput(hw domain.HardwareProfile, entries []domain.ModelEntry) error {
 	if entries == nil {
 		return errors.New("entries must not be nil")
 	}

@@ -3,16 +3,24 @@ package tui
 import (
 	"testing"
 
-	"github.com/kevo-1/KnowURLLM/internal/models"
+	"github.com/kevo-1/KnowURLLM/internal/domain"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// makeTestResults creates a slice of RankResult for testing.
-func makeTestResults(n int) []models.RankResult {
-	results := make([]models.RankResult, n)
+// makeTestResults creates a slice of RankedModel for testing.
+func makeTestResults(n int) []domain.RankedModel {
+	results := make([]domain.RankedModel, n)
 	for i := 0; i < n; i++ {
-		results[i] = models.RankResult{
-			Model: models.ModelEntry{
+		// Set different run modes for testing
+		var mode domain.RunMode
+		if i < 2 {
+			mode = domain.RunModeGPU // First 2 fit in VRAM
+		} else {
+			mode = domain.RunModeCPUGPU // Rest spill to RAM
+		}
+		
+		results[i] = domain.RankedModel{
+			Model: domain.ModelEntry{
 				ID:             "model-" + string(rune('0'+i)),
 				DisplayName:    "Model " + string(rune('0'+i)),
 				ModelSizeBytes: uint64(4 * 1024 * 1024 * 1024),
@@ -25,15 +33,16 @@ func makeTestResults(n int) []models.RankResult {
 				URL:            "https://example.com/model-" + string(rune('0'+i)),
 				Tags:           []string{"text-generation", "conversational"},
 			},
-			Score: models.ModelScore{
-				TotalScore:       90.0 - float64(i)*3,
-				HardwareFitScore: 95.0,
-				ThroughputScore:  80.0,
-				QualityScore:     70.0 + float64(i)*2,
-				EstimatedTPS:     40.0 + float64(i)*5,
-				FitsInVRAM:       i < 2,
-				FitsInMemory:     true,
-				FitReason:        "Fits in VRAM with 40% headroom",
+			Quality: domain.ModelQuality{
+				Overall:    90.0 - float64(i)*3,
+				Confidence: 0.85,
+				Tier:       domain.TierA,
+			},
+			Hardware: domain.ModelHardware{
+				EstimatedTPS:   40.0 + float64(i)*5,
+				FitLabel:       "Perfect",
+				BestQuant:      "Q4_K_M",
+				Mode:           mode,
 			},
 			Rank: i + 1,
 		}
@@ -156,11 +165,11 @@ func TestQuit(t *testing.T) {
 // TestVRAMOnlyFilter verifies the VRAM-only toggle.
 func TestVRAMOnlyFilter(t *testing.T) {
 	results := makeTestResults(5)
-	results[0].Score.FitsInVRAM = true
-	results[1].Score.FitsInVRAM = true
-	results[2].Score.FitsInVRAM = false
-	results[3].Score.FitsInVRAM = false
-	results[4].Score.FitsInVRAM = false
+	results[0].Hardware.Mode = domain.RunModeGPU
+	results[1].Hardware.Mode = domain.RunModeGPU
+	results[2].Hardware.Mode = domain.RunModeCPUGPU
+	results[3].Hardware.Mode = domain.RunModeCPU
+	results[4].Hardware.Mode = domain.RunModeCPU
 
 	m := initialModel(results)
 
@@ -297,18 +306,18 @@ func TestTruncate(t *testing.T) {
 func TestFilterResults(t *testing.T) {
 	results := makeTestResults(5)
 
-	got := filterResults(results, models.FilterOptions{})
+	got := filterResults(results, domain.FilterOptions{})
 	if len(got) != 5 {
 		t.Errorf("expected 5 results with no filters, got %d", len(got))
 	}
 
 	// Search by display name (case-insensitive)
-	got = filterResults(results, models.FilterOptions{SearchQuery: "model 0"})
+	got = filterResults(results, domain.FilterOptions{SearchQuery: "model 0"})
 	if len(got) != 1 {
 		t.Errorf("expected 1 result for search, got %d", len(got))
 	}
 
-	got = filterResults(results, models.FilterOptions{VRAMOnly: true})
+	got = filterResults(results, domain.FilterOptions{VRAMOnly: true})
 	if len(got) != 2 {
 		t.Errorf("expected 2 VRAM results, got %d", len(got))
 	}
